@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý & Theo Dõi Thời Gian Cá Nhân</title>
+    <meta name="theme-color" content="#4338ca">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Quản Lý Thời Gian">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 font-sans antialiased text-gray-800">
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg flex flex-col relative pb-20">
+        <!-- Header -->
+        <header class="bg-indigo-700 text-white p-4 sticky top-0 z-20 shadow">
+            <div class="flex justify-between items-center mb-2">
+                <h1 class="text-base font-bold flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> Quản Lý Thời Gian</h1>
+                <div class="flex gap-2">
+                    <button onclick="exportData()" title="Xuất dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-download"></i></button>
+                    <button onclick="document.getElementById('importFile').click()" title="Nhập dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-upload"></i></button>
+                    <input type="file" id="importFile" class="hidden" onchange="importData(event)">
+                    <button id="installAppBtn" class="hidden bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs" title="Cài ứng dụng"><i class="fa-solid fa-mobile-screen-button"></i></button>
+                </div>
+            </div>
+            <!-- Tổng quan ngày -->
+            <div class="bg-indigo-800/60 rounded-xl p-3 backdrop-blur-sm">
+                <p class="text-xs text-indigo-200">Tổng thời gian ghi nhận hôm nay</p>
+                <h2 id="totalTimeToday" class="text-2xl font-extrabold tracking-tight">0 giờ 0 phút</h2>
+                <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-indigo-600/50 text-xs">
+                    <div><span class="text-indigo-300">Làm việc:</span> <span id="summaryWork" class="font-bold">0 phút</span></div>
+                    <div><span class="text-indigo-300">Phát triển bản thân (Đọc/Tập):</span> <span id="summaryGrowth" class="font-bold">0 phút</span></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex bg-white border-b border-gray-200 overflow-x-auto text-xs font-semibold sticky top-[125px] z-10 shadow-sm">
+            <button onclick="switchTab('logs')" id="nav-logs" class="flex-1 py-3 px-2 text-center border-b-2 border-indigo-600 text-indigo-700 whitespace-nowrap"><i class="fa-solid fa-list-check mr-1"></i> Nhật Ký</button>
+            <button onclick="switchTab('analytics')" id="nav-analytics" class="flex-1 py-3 px-2 text-center border-b-2 border-transparent text-gray-500 whitespace-nowrap"><i class="fa-solid fa-chart-pie mr-1"></i> Thống Kê</button>
+        </nav>
+
+        <!-- Main Content Container -->
+        <main class="flex-1 p-3 overflow-y-auto">
+            <!-- TAB 1: NHẬT KÝ THỜI GIAN -->
+            <section id="tab-logs" class="space-y-3">
+                <div class="bg-gray-50 p-2.5 rounded-lg border border-gray-200 text-xs space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Lọc theo ngày nhật ký</span>
+                        <input type="date" id="filterDate" onchange="renderLogs()" class="bg-white border rounded p-1 text-xs font-medium">
+                    </div>
+                </div>
+
+                <!-- Biểu đồ nhanh trong ngày -->
+                <div class="bg-white p-3 rounded-xl border shadow-sm">
+                    <h3 class="text-xs font-bold text-gray-600 mb-1 text-center">Phân bổ thời gian ngày đã chọn</h3>
+                    <div class="w-full h-40 flex justify-center"><canvas id="dailyPieChart"></canvas></div>
+                </div>
+
+                <button onclick="openLogModal()" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-xs font-bold shadow"><i class="fa-solid fa-plus mr-1"></i> Ghi Nhận Hoạt Động Mới</button>
+                <div class="text-[11px] text-gray-400 italic text-center">* Chạm vào mục bất kỳ để chỉnh sửa hoặc xóa</div>
+                <div id="logList" class="space-y-2"></div>
+            </section>
+
+            <!-- TAB 2: THỐNG KÊ TỔNG QUAN -->
+            <section id="tab-analytics" class="space-y-4 hidden">
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Bộ lọc thống kê thời gian</span>
+                        <select id="analyticsTimeFilter" onchange="handleAnalyticsFilterChange()" class="bg-white border rounded p-1 text-xs font-medium">
+                            <option value="TODAY">Hôm nay</option>
+                            <option value="WEEK">Tuần này</option>
+                            <option value="MONTH" selected>Tháng này</option>
+                            <option value="YEAR">Năm nay</option>
+                            <option value="SPECIFIC_DATE">Ngày cụ thể</option>
+                            <option value="SPECIFIC_MONTH">Tháng cụ thể</option>
+                            <option value="CUSTOM_YEAR">Năm cụ thể</option>
+                        </select>
+                    </div>
+
+                    <div id="analyticsDateContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn ngày:</span>
+                        <input type="date" id="analyticsDateInput" onchange="renderAnalyticsCharts()" class="border rounded p-1 text-xs">
+                    </div>
+                    <div id="analyticsMonthContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn tháng:</span>
+                        <input type="month" id="analyticsMonthInput" onchange="renderAnalyticsCharts()" class="border rounded p-1 text-xs">
+                    </div>
+                    <div id="analyticsYearContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn năm:</span>
+                        <input type="number" id="analyticsYearInput" value="2026" onchange="renderAnalyticsCharts()" class="border rounded p-1 w-20 text-xs">
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-xl border shadow-sm">
+                    <h3 id="analyticsChartTitle" class="text-xs font-bold text-gray-600 mb-2 text-center">Tỷ trọng thời gian theo danh mục</h3>
+                    <div class="w-full h-56 flex justify-center"><canvas id="totalAnalyticsChart"></canvas></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Floating Action Button -->
+        <button onclick="openLogModal()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-xl z-35 transition-transform active:scale-95">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+
+        <!-- MODAL THÊM / SỬA HOẠT ĐỘNG -->
+        <div id="logModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                    <h3 id="modalTitle" class="font-bold text-sm text-indigo-700"><i class="fa-solid fa-pen-to-square mr-1"></i> Ghi Nhận Thời Gian</h3>
+                    <button onclick="closeLogModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <form id="logForm" onsubmit="saveLog(event)" class="space-y-3 text-xs">
+                    <input type="hidden" id="editLogId">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="font-semibold text-gray-600">Danh mục chính *</label>
+                            <button type="button" onclick="addNewCategoryPrompt()" class="text-indigo-600 font-bold hover:underline">+ Thêm danh mục</button>
+                        </div>
+                        <select id="logCategory" onchange="updateSubCategories()" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-medium"></select>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="font-semibold text-gray-600">Công việc cụ thể *</label>
+                            <button type="button" onclick="addNewSubCategoryPrompt()" class="text-indigo-600 font-bold hover:underline">+ Thêm việc cụ thể</button>
+                        </div>
+                        <select id="logSubCategory" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-medium"></select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Thời gian bắt đầu *</label>
+                        <input type="datetime-local" id="logStartTime" onchange="calculateEndTime()" required class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Nhập nhanh thời lượng (Ví dụ: 1h, 30p, 1.5h...)</label>
+                        <input type="text" id="logDurationInput" placeholder="VD: 1h30m hoặc 45p hoặc 2h" oninput="calculateEndTime()" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-600">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Thời gian kết thúc (Tự động tính = Bắt đầu + Thời lượng)</label>
+                        <input type="datetime-local" id="logEndTime" required class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Ghi chú chi tiết</label>
+                        <input type="text" id="logNote" placeholder="Ví dụ: Kiểm tra tiến độ khu A06..." class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button type="button" onclick="closeLogModal()" class="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg font-bold">Hủy</button>
+                        <button type="submit" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold shadow">Lưu lại</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let db = JSON.parse(localStorage.getItem('timetrack_db_v2')) || {
+            categories: {
+                "Làm việc": ["Đi kiểm tra hiện trường", "Nhắc nhở thi công", "Xem tin nhắn nhóm", "Lập tiến độ & Hồ sơ", "Họp & Trao đổi"],
+                "Ăn uống": ["Ăn sáng", "Ăn trưa", "Ăn tối", "Cà phê / Giải khát"],
+                "Tập thể dục": ["Đi bộ", "Hít xà / Thể hình", "Bát Đoạn Cẩm & Thái Cực Quyền"],
+                "Đọc sách": ["Sách Quản lý & Lãnh đạo", "Sách Kỹ năng giao tiếp", "Đọc tài liệu tiếng Anh"],
+                "Giải trí": ["Xem tin tức", "Chơi game (Đế Chế)", "Thư giãn"],
+                "Di chuyển": ["Đi lại công trường", "Về quê / Di chuyển cá nhân"],
+                "Ngủ": ["Ngủ đêm", "Ngủ trưa"]
+            },
+            logs: []
+        };
+
+        let dailyPieChartInstance = null;
+        let totalAnalyticsChartInstance = null;
+
+        function saveData() {
+            localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+            updateAllUI();
+        }
+
+        function switchTab(tabId) {
+            ['logs', 'analytics'].forEach(id => {
+                document.getElementById('tab-' + id).classList.add('hidden');
+                document.getElementById('nav-' + id).className = "flex-1 py-3 px-2 text-center border-b-2 border-transparent text-gray-500 whitespace-nowrap text-xs";
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('nav-' + tabId).className = "flex-1 py-3 px-2 text-center border-b-2 border-indigo-600 text-indigo-700 font-bold whitespace-nowrap text-xs";
+            if(tabId === 'analytics') renderAnalyticsCharts();
+        }
+
+        function initApp() {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            document.getElementById('filterDate').value = todayStr;
+            document.getElementById('analyticsDateInput').value = todayStr;
+            document.getElementById('analyticsMonthInput').value = todayStr.slice(0, 7);
+
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
+            document.getElementById('logStartTime').value = localISOTime;
+            document.getElementById('logEndTime').value = localISOTime;
+
+            renderCategoryDropdown();
+            updateAllUI();
+        }
+
+        function updateAllUI() {
+            renderLogs();
+            updateSummaryCards();
+            if(!document.getElementById('tab-analytics').classList.contains('hidden')) {
+                renderAnalyticsCharts();
+            }
+        }
+
+        // Tự động tính thời gian kết thúc từ thời gian bắt đầu + thời lượng nhập nhanh
+        function calculateEndTime() {
+            const startVal = document.getElementById('logStartTime').value;
+            const durationStr = document.getElementById('logDurationInput').value.trim();
+            if(!startVal) return;
+
+            let startDate = new Date(startVal);
+            if(isNaN(startDate.getTime())) return;
+
+            let totalMins = parseDurationToMinutes(durationStr);
+            if(totalMins > 0) {
+                let endDate = new Date(startDate.getTime() + totalMins * 60000);
+                const offset = endDate.getTimezoneOffset() * 60000;
+                let localEndISO = (new Date(endDate - offset)).toISOString().slice(0, 16);
+                document.getElementById('logEndTime').value = localEndISO;
+            }
+        }
+
+        function parseDurationToMinutes(str) {
+            if(!str) return 0;
+            str = str.toLowerCase().replace(/\s+/g, '');
+            let totalMins = 0;
+
+            let hMatch = str.match(/(\d+(?:\.\d+)?)h/);
+            let mMatch = str.match(/(\d+)p|(\d+)m/);
+
+            let hours = hMatch ? parseFloat(hMatch[1]) : 0;
+            let mins = mMatch ? parseInt(mMatch[1] || mMatch[2]) : 0;
+
+            if(!hMatch && !mMatch && !isNaN(str)) {
+                // Nếu chỉ nhập số thuần túy, mặc định là phút
+                totalMins = parseInt(str);
+            } else {
+                totalMins = Math.round(hours * 60 + mins);
+            }
+            return totalMins;
+        }
+
+        function addNewCategoryPrompt() {
+            const cat = prompt("Nhập tên danh mục chính mới:");
+            if(cat && cat.trim() !== '') {
+                if(!db.categories[cat.trim()]) {
+                    db.categories[cat.trim()] = ["Hoạt động chung"];
+                    saveData();
+                    renderCategoryDropdown();
+                    document.getElementById('logCategory').value = cat.trim();
+                    updateSubCategories();
+                } else {
+                    alert("Danh mục này đã tồn tại!");
+                }
+            }
+        }
+
+        function addNewSubCategoryPrompt() {
+            const cat = document.getElementById('logCategory').value;
+            const sub = prompt(`Nhập việc cụ thể cho danh mục [${cat}]:`);
+            if(sub && sub.trim() !== '') {
+                if(!db.categories[cat].includes(sub.trim())) {
+                    db.categories[cat].push(sub.trim());
+                    saveData();
+                    updateSubCategories();
+                    document.getElementById('logSubCategory').value = sub.trim();
+                } else {
+                    alert("Việc này đã tồn tại trong danh mục!");
+                }
+            }
+        }
+
+        function renderCategoryDropdown() {
+            const catSel = document.getElementById('logCategory');
+            let cur = catSel.value;
+            catSel.innerHTML = '';
+            Object.keys(db.categories).forEach(cat => {
+                catSel.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+            if(cur && db.categories[cur]) catSel.value = cur;
+            updateSubCategories();
+        }
+
+        function updateSubCategories() {
+            const cat = document.getElementById('logCategory').value;
+            const subSel = document.getElementById('logSubCategory');
+            let curSub = subSel.value;
+            subSel.innerHTML = '';
+            if(db.categories[cat]) {
+                db.categories[cat].forEach(sub => {
+                    subSel.innerHTML += `<option value="${sub}">${sub}</option>`;
+                });
+            }
+            if(curSub) subSel.value = curSub;
+        }
+
+        function openLogModal(editId = null) {
+            document.getElementById('logModal').classList.remove('hidden');
+            renderCategoryDropdown();
+            if(editId) {
+                let log = db.logs.find(x => x.id === editId);
+                if(log) {
+                    document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Sửa Hoạt Động`;
+                    document.getElementById('editLogId').value = log.id;
+                    document.getElementById('logCategory').value = log.category;
+                    updateSubCategories();
+                    document.getElementById('logSubCategory').value = log.subCategory;
+                    document.getElementById('logStartTime').value = log.startTime;
+                    document.getElementById('logEndTime').value = log.endTime;
+                    document.getElementById('logDurationInput').value = '';
+                    document.getElementById('logNote').value = log.note || '';
+                }
+            } else {
+                document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Ghi Nhận Thời Gian`;
+                document.getElementById('logForm').reset();
+                document.getElementById('editLogId').value = '';
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                let isoTime = (new Date(now - offset)).toISOString().slice(0, 16);
+                document.getElementById('logStartTime').value = isoTime;
+                document.getElementById('logEndTime').value = isoTime;
+                renderCategoryDropdown();
+            }
+        }
+        function closeLogModal() { document.getElementById('logModal').classList.add('hidden'); }
+
+        function saveLog(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editLogId').value;
+            const category = document.getElementById('logCategory').value;
+            const subCategory = document.getElementById('logSubCategory').value;
+            const startTime = document.getElementById('logStartTime').value;
+            const endTime = document.getElementById('logEndTime').value;
+            const note = document.getElementById('logNote').value;
+
+            if(new Date(startTime) > new Date(endTime)) {
+                alert("Thời gian bắt đầu không thể sau thời gian kết thúc!");
+                return;
+            }
+
+            if(editId) {
+                let log = db.logs.find(x => x.id == editId);
+                if(log) {
+                    log.category = category;
+                    log.subCategory = subCategory;
+                    log.startTime = startTime;
+                    log.endTime = endTime;
+                    log.note = note;
+                }
+            } else {
+                db.logs.push({
+                    id: Date.now(),
+                    category, subCategory, startTime, endTime, note
+                });
+            }
+
+            db.logs.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
+            saveData();
+            closeLogModal();
+        }
+
+        function deleteLog(id, event) {
+            event.stopPropagation();
+            if(confirm("Bạn có chắc muốn xóa ghi nhận này?")) {
+                db.logs = db.logs.filter(l => l.id !== id);
+                saveData();
+            }
+        }
+
+        function getFilteredLogs() {
+            const filterDate = document.getElementById('filterDate').value;
+            return db.logs.filter(l => l.startTime.slice(0, 10) === filterDate);
+        }
+
+        function formatMinutes(mins) {
+            let h = Math.floor(mins / 60);
+            let m = mins % 60;
+            return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`;
+        }
+
+        function renderLogs() {
+            const listEl = document.getElementById('logList');
+            let filtered = getFilteredLogs();
+
+            renderDailyPieChart(filtered);
+
+            if(filtered.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-8 text-gray-400 text-xs">Chưa có hoạt động nào được ghi nhận trong ngày này.</div>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(l => {
+                let startStr = new Date(l.startTime).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+                let endStr = new Date(l.endTime).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+                let durationMins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+
+                html += `
+                    <div onclick="openLogModal(${l.id})" class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center text-xs active:bg-gray-50 cursor-pointer">
+                        <div class="space-y-0.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">${l.category}</span>
+                                <span class="text-gray-600 font-semibold">• ${l.subCategory}</span>
+                            </div>
+                            <p class="text-gray-500">${l.note || 'Không có ghi chú'}</p>
+                            <span class="text-[10px] text-gray-400"><i class="fa-regular fa-clock mr-1"></i>${startStr} - ${endStr}</span>
+                        </div>
+                        <div class="text-right flex items-center gap-3">
+                            <div>
+                                <span class="font-extrabold text-sm text-indigo-600">${formatMinutes(durationMins)}</span>
+                            </div>
+                            <button onclick="deleteLog(${l.id}, event)" class="text-gray-300 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function updateSummaryCards() {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            let todayLogs = db.logs.filter(l => l.startTime.slice(0, 10) === todayStr);
+            let totalMins = 0;
+            let workMins = 0;
+            let growthMins = 0;
+
+            todayLogs.forEach(l => {
+                let mins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+                if(mins > 0) {
+                    totalMins += mins;
+                    if(l.category === 'Làm việc') workMins += mins;
+                    if(l.category === 'Đọc sách' || l.category === 'Tập thể dục') growthMins += mins;
+                }
+            });
+
+            document.getElementById('totalTimeToday').innerText = formatMinutes(totalMins);
+            document.getElementById('summaryWork').innerText = formatMinutes(workMins);
+            document.getElementById('summaryGrowth').innerText = formatMinutes(growthMins);
+        }
+
+        function renderDailyPieChart(filteredLogs) {
+            let catTotals = {};
+            filteredLogs.forEach(l => {
+                let mins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+                if(mins > 0) {
+                    catTotals[l.category] = (catTotals[l.category] || 0) + mins;
+                }
+            });
+
+            let labels = Object.keys(catTotals);
+            let data = Object.values(catTotals);
+
+            const ctx = document.getElementById('dailyPieChart').getContext('2d');
+            if(dailyPieChartInstance) dailyPieChartInstance.destroy();
+
+            dailyPieChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.length > 0 ? labels : ['Chưa có dữ liệu'],
+                    datasets: [{
+                        data: data.length > 0 ? data : [1],
+                        backgroundColor: ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#64748b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }
+                }
+            });
+        }
+
+        function handleAnalyticsFilterChange() {
+            const filterVal = document.getElementById('analyticsTimeFilter').value;
+            document.getElementById('analyticsDateContainer').classList.add('hidden');
+            document.getElementById('analyticsMonthContainer').classList.add('hidden');
+            document.getElementById('analyticsYearContainer').classList.add('hidden');
+
+            if(filterVal === 'SPECIFIC_DATE') document.getElementById('analyticsDateContainer').classList.remove('hidden');
+            if(filterVal === 'SPECIFIC_MONTH') document.getElementById('analyticsMonthContainer').classList.remove('hidden');
+            if(filterVal === 'CUSTOM_YEAR') document.getElementById('analyticsYearContainer').classList.remove('hidden');
+
+            renderAnalyticsCharts();
+        }
+
+        function renderAnalyticsCharts() {
+            const filterVal = document.getElementById('analyticsTimeFilter').value;
+            const specificDate = document.getElementById('analyticsDateInput').value;
+            const specificMonth = document.getElementById('analyticsMonthInput').value;
+            const customYear = Number(document.getElementById('analyticsYearInput').value) || 2026;
+
+            const now = new Date();
+            let filtered = db.logs.filter(l => {
+                let lDate = new Date(l.startTime);
+                if(filterVal === 'TODAY') {
+                    return l.startTime.slice(0, 10) === now.toISOString().slice(0, 10);
+                } else if(filterVal === 'WEEK') {
+                    let startOfWeek = new Date(now);
+                    startOfWeek.setDate(now.getDate() - now.getDay());
+                    startOfWeek.setHours(0,0,0,0);
+                    return lDate >= startOfWeek;
+                } else if(filterVal === 'MONTH') {
+                    return lDate.getMonth() === now.getMonth() && lDate.getFullYear() === now.getFullYear();
+                } else if(filterVal === 'YEAR') {
+                    return lDate.getFullYear() === now.getFullYear();
+                } else if(filterVal === 'SPECIFIC_DATE') {
+                    return l.startTime.slice(0, 10) === specificDate;
+                } else if(filterVal === 'SPECIFIC_MONTH') {
+                    return l.startTime.slice(0, 7) === specificMonth;
+                } else if(filterVal === 'CUSTOM_YEAR') {
+                    return lDate.getFullYear() === customYear;
+                }
+                return true;
+            });
+
+            let catTotals = {};
+            filtered.forEach(l => {
+                let mins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+                if(mins > 0) {
+                    catTotals[l.category] = (catTotals[l.category] || 0) + mins;
+                }
+            });
+
+            let labels = Object.keys(catTotals);
+            let data = Object.values(catTotals);
+
+            const ctx = document.getElementById('totalAnalyticsChart').getContext('2d');
+            if(totalAnalyticsChartInstance) totalAnalyticsChartInstance.destroy();
+
+            totalAnalyticsChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.length > 0 ? labels : ['Chưa có dữ liệu'],
+                    datasets: [{
+                        data: data.length > 0 ? data : [1],
+                        backgroundColor: ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#64748b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+                }
+            });
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "timetrack_backup.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    db = JSON.parse(e.target.result);
+                    saveData();
+                    alert("Khôi phục dữ liệu thời gian thành công!");
+                } catch(err) {
+                    alert("File dữ liệu không hợp lệ!");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = initApp;
+    </script>
+
+    <script>
+        let deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.remove('hidden');
+        });
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('#installAppBtn');
+            if (!btn || !deferredInstallPrompt) return;
+            deferredInstallPrompt.prompt();
+            try { await deferredInstallPrompt.userChoice; } catch (_) {}
+            deferredInstallPrompt = null;
+            btn.classList.add('hidden');
+        });
+        window.addEventListener('appinstalled', () => {
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.add('hidden');
+        });
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
+        }
+    </script>
+</body>
+</html>
