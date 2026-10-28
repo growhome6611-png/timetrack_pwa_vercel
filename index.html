@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản Lý & Theo Dõi Thời Gian Cá Nhân</title>
     <meta name="theme-color" content="#4338ca">
+    <meta name="app-version" content="timetrack-drive-v2">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Quản Lý Thời Gian">
@@ -22,10 +23,28 @@
             <div class="flex justify-between items-center mb-2">
                 <h1 class="text-base font-bold flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> Quản Lý Thời Gian</h1>
                 <div class="flex gap-2">
+                    <button onclick="openDrivePanel()" title="Tài khoản & Đồng bộ" class="bg-amber-500 hover:bg-amber-400 px-2.5 py-1 rounded text-xs font-bold"><i class="fa-brands fa-google-drive mr-1"></i>Drive</button>
                     <button onclick="exportData()" title="Xuất dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-download"></i></button>
                     <button onclick="document.getElementById('importFile').click()" title="Nhập dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-upload"></i></button>
                     <input type="file" id="importFile" class="hidden" onchange="importData(event)">
                     <button id="installAppBtn" class="hidden bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs" title="Cài ứng dụng"><i class="fa-solid fa-mobile-screen-button"></i></button>
+                </div>
+            </div>
+
+            <!-- Tài khoản Google Drive -->
+            <div class="w-full mb-2 bg-indigo-800/80 rounded-lg px-3 py-2 text-xs border border-indigo-500/40">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-user text-indigo-200"></i>
+                        <span id="driveAccountEmail" class="truncate font-semibold">Chưa kết nối Google Drive</span>
+                    </div>
+                    <span id="driveAccountBadge" class="bg-indigo-600 px-2 py-0.5 rounded text-[10px] font-bold">Cục bộ</span>
+                </div>
+                <div class="flex gap-2 mt-2 flex-wrap">
+                    <button id="driveLoginBtn" onclick="connectGoogleDrive(false)" class="bg-white text-indigo-700 px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-brands fa-google mr-1"></i>Đăng nhập Google</button>
+                    <button id="driveSyncBtn" onclick="syncNow()" class="hidden bg-sky-600 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-cloud mr-1"></i><span id="driveSyncText">Đồng bộ</span></button>
+                    <button id="driveSwitchBtn" onclick="switchGoogleAccount()" class="hidden bg-amber-500 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-right-left mr-1"></i>Đổi TK</button>
+                    <button id="driveLogoutBtn" onclick="signOutGoogleDrive()" class="hidden bg-rose-600 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Thoát</button>
                 </div>
             </div>
             <!-- Tổng quan ngày -->
@@ -40,7 +59,7 @@
         </header>
 
         <!-- Navigation Tabs -->
-        <nav class="flex bg-white border-b border-gray-200 overflow-x-auto text-xs font-semibold sticky top-[125px] z-10 shadow-sm">
+        <nav class="flex bg-white border-b border-gray-200 overflow-x-auto text-xs font-semibold sticky top-[198px] z-10 shadow-sm">
             <button onclick="switchTab('logs')" id="nav-logs" class="flex-1 py-3 px-2 text-center border-b-2 border-indigo-600 text-indigo-700 whitespace-nowrap"><i class="fa-solid fa-list-check mr-1"></i> Nhật Ký</button>
             <button onclick="switchTab('analytics')" id="nav-analytics" class="flex-1 py-3 px-2 text-center border-b-2 border-transparent text-gray-500 whitespace-nowrap"><i class="fa-solid fa-chart-pie mr-1"></i> Thống Kê</button>
         </nav>
@@ -108,6 +127,27 @@
         <button onclick="openLogModal()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-xl z-35 transition-transform active:scale-95">
             <i class="fa-solid fa-plus"></i>
         </button>
+
+        <!-- PANEL GOOGLE DRIVE -->
+        <div id="drivePanel" class="fixed inset-0 bg-black/50 z-[90] hidden flex items-end sm:items-center justify-center">
+            <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 text-xs">
+                <div class="flex justify-between items-center border-b pb-2 mb-3">
+                    <h3 class="font-bold text-sm text-indigo-700"><i class="fa-brands fa-google-drive mr-1"></i> Tài khoản & Đồng bộ Drive</h3>
+                    <button onclick="closeDrivePanel()" class="text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-2.5">
+                    <div class="bg-gray-50 rounded-lg p-3 border"><span class="text-gray-500">Tài khoản:</span><br><strong id="drivePanelEmail" class="text-sm">Chưa kết nối</strong></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="pullCloudData(true)" class="bg-sky-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-cloud-arrow-down mr-1"></i>Tải từ Drive</button>
+                        <button onclick="pushCloudData(true)" class="bg-indigo-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Đẩy lên Drive</button>
+                    </div>
+                    <button onclick="syncNow()" class="w-full bg-violet-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-rotate mr-1"></i>Đồng bộ 2 chiều</button>
+                    <button onclick="switchGoogleAccount()" class="w-full bg-amber-100 text-amber-800 border border-amber-300 py-2.5 rounded-lg font-bold"><i class="fa-solid fa-user-gear mr-1"></i>Đổi Gmail</button>
+                    <button onclick="signOutGoogleDrive()" class="w-full bg-rose-50 text-rose-700 border border-rose-200 py-2.5 rounded-lg font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Đăng xuất</button>
+                    <p class="text-[10px] text-gray-400 text-center">Dữ liệu vẫn lưu cục bộ để dùng offline và đồng bộ vào Google Drive của Gmail đang kết nối.</p>
+                </div>
+            </div>
+        </div>
 
         <!-- MODAL THÊM / SỬA HOẠT ĐỘNG -->
         <div id="logModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -609,5 +649,204 @@
             window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
         }
     </script>
+
+    <script>
+    // ===== TimeTrack Google Drive sync via Vercel serverless OAuth =====
+    let serverDriveConnected = false;
+    let activeDriveEmail = '';
+    let driveSyncTimer = null;
+
+    const ORIGINAL_SAVE_DATA = saveData;
+    function driveDataKey(email=activeDriveEmail) { return email ? 'timetrack_db_v2_drive_' + email.toLowerCase() : 'timetrack_db_v2'; }
+    function driveUpdatedKey(email=activeDriveEmail) { return 'timetrack_drive_updated_' + (email || 'local').toLowerCase(); }
+
+    function setDriveState(text, ok=true) {
+        const t = document.getElementById('driveSyncText');
+        const b = document.getElementById('driveAccountBadge');
+        if(t) t.innerText = text;
+        if(b) { b.innerText = text; b.className = ok ? 'bg-emerald-600 px-2 py-0.5 rounded text-[10px] font-bold' : 'bg-amber-500 px-2 py-0.5 rounded text-[10px] font-bold'; }
+    }
+
+    function refreshDriveUI() {
+        const logged = serverDriveConnected && !!activeDriveEmail;
+        const email = activeDriveEmail || 'Chưa kết nối Google Drive';
+        document.getElementById('driveAccountEmail').innerText = email;
+        document.getElementById('drivePanelEmail').innerText = email;
+        document.getElementById('driveLoginBtn').classList.toggle('hidden', logged);
+        document.getElementById('driveSyncBtn').classList.toggle('hidden', !logged);
+        document.getElementById('driveSwitchBtn').classList.toggle('hidden', !logged);
+        document.getElementById('driveLogoutBtn').classList.toggle('hidden', !logged);
+        if(!logged) setDriveState('Cục bộ', false);
+    }
+
+    function openDrivePanel() {
+        if(!serverDriveConnected) { connectGoogleDrive(false); return; }
+        document.getElementById('drivePanel').classList.remove('hidden');
+        refreshDriveUI();
+    }
+    function closeDrivePanel() { document.getElementById('drivePanel').classList.add('hidden'); }
+
+    function saveData() {
+        const now = new Date().toISOString();
+        localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+        if(activeDriveEmail) {
+            localStorage.setItem(driveDataKey(), JSON.stringify(db));
+            localStorage.setItem(driveUpdatedKey(), now);
+        }
+        updateAllUI();
+        if(serverDriveConnected) {
+            clearTimeout(driveSyncTimer);
+            setDriveState('Chờ đồng bộ…', false);
+            driveSyncTimer = setTimeout(() => pushCloudData(false), 900);
+        }
+    }
+
+    async function apiJson(url, options={}) {
+        const r = await fetch(url, { credentials:'include', ...options });
+        if(r.status === 204) return null;
+        const text = await r.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+        if(!r.ok) throw new Error(data?.error || ('HTTP ' + r.status));
+        return data;
+    }
+
+    async function initDriveSession() {
+        try {
+            const s = await apiJson('/api/google-session');
+            serverDriveConnected = !!s?.connected;
+            activeDriveEmail = s?.email || '';
+            if(serverDriveConnected && activeDriveEmail) {
+                const saved = localStorage.getItem(driveDataKey());
+                if(saved) {
+                    try { db = JSON.parse(saved); } catch(_) {}
+                } else if(!localStorage.getItem('timetrack_drive_first_migration_done')) {
+                    // First connected Gmail receives the current local data as its starting copy.
+                    localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                    localStorage.setItem(driveUpdatedKey(), new Date().toISOString());
+                    localStorage.setItem('timetrack_drive_first_migration_done', '1');
+                } else {
+                    // A different Gmail starts clean unless Drive already contains data.
+                    db = { categories: JSON.parse(JSON.stringify(DEFAULT_TIMETRACK_CATEGORIES)), logs: [] };
+                    localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                    localStorage.setItem(driveUpdatedKey(), '1970-01-01T00:00:00.000Z');
+                }
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                updateAllUI();
+                await syncNow(false);
+            }
+            refreshDriveUI();
+            return serverDriveConnected;
+        } catch(e) {
+            serverDriveConnected = false; activeDriveEmail = '';
+            refreshDriveUI();
+            console.error(e);
+            return false;
+        }
+    }
+
+    async function getRemoteDrivePayload() { return await apiJson('/api/drive-data'); }
+    async function uploadRemoteDrivePayload(payload) {
+        return await apiJson('/api/drive-data', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    }
+
+    async function pushCloudData(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        if(!navigator.onLine) { setDriveState('Ngoại tuyến', false); return; }
+        try {
+            setDriveState('Đang đẩy…', false);
+            const updatedAt = localStorage.getItem(driveUpdatedKey()) || new Date().toISOString();
+            await uploadRemoteDrivePayload({ app:'timetrack', version:1, email:activeDriveEmail, updatedAt, data:db });
+            localStorage.setItem('timetrack_last_sync', new Date().toISOString());
+            setDriveState('Đã đồng bộ');
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không đồng bộ được Google Drive: ' + e.message);
+        }
+    }
+
+    async function pullCloudData(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        try {
+            setDriveState('Đang tải…', false);
+            const p = await getRemoteDrivePayload();
+            if(p?.data) {
+                db = p.data;
+                localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                localStorage.setItem(driveUpdatedKey(), p.updatedAt || new Date().toISOString());
+                updateAllUI();
+                setDriveState('Đã đồng bộ');
+            } else {
+                setDriveState('Drive chưa có dữ liệu', false);
+                if(interactive) await pushCloudData(true);
+            }
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không tải được Google Drive: ' + e.message);
+        }
+    }
+
+    async function syncNow(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        try {
+            setDriveState('Đang đồng bộ…', false);
+            const remote = await getRemoteDrivePayload();
+            const localTs = Date.parse(localStorage.getItem(driveUpdatedKey()) || '1970-01-01') || 0;
+            const remoteTs = Date.parse(remote?.updatedAt || '1970-01-01') || 0;
+            if(remote?.data && remoteTs > localTs) {
+                db = remote.data;
+                localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                localStorage.setItem(driveUpdatedKey(), remote.updatedAt);
+                updateAllUI();
+            } else {
+                await pushCloudData(false);
+            }
+            setDriveState('Đã đồng bộ');
+            closeDrivePanel();
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không đồng bộ được Google Drive: ' + e.message);
+        }
+    }
+
+    function connectGoogleDrive(forceChooser=false) {
+        window.location.assign(forceChooser ? '/api/google-login?switch=1' : '/api/google-login');
+    }
+    async function switchGoogleAccount() {
+        if(activeDriveEmail) {
+            localStorage.setItem(driveDataKey(), JSON.stringify(db));
+            localStorage.setItem(driveUpdatedKey(), localStorage.getItem(driveUpdatedKey()) || new Date().toISOString());
+        }
+        window.location.assign('/api/google-login?switch=1');
+    }
+    async function signOutGoogleDrive() {
+        if(activeDriveEmail) localStorage.setItem(driveDataKey(), JSON.stringify(db));
+        try { await fetch('/api/google-logout', { method:'POST', credentials:'include' }); } catch(_) {}
+        serverDriveConnected = false; activeDriveEmail = '';
+        refreshDriveUI(); closeDrivePanel();
+    }
+
+    const DEFAULT_TIMETRACK_CATEGORIES = {
+        "Làm việc": ["Đi kiểm tra hiện trường", "Nhắc nhở thi công", "Xem tin nhắn nhóm", "Lập tiến độ & Hồ sơ", "Họp & Trao đổi"],
+        "Ăn uống": ["Ăn sáng", "Ăn trưa", "Ăn tối", "Cà phê / Giải khát"],
+        "Tập thể dục": ["Đi bộ", "Hít xà / Thể hình", "Bát Đoạn Cẩm & Thái Cực Quyền"],
+        "Đọc sách": ["Sách Quản lý & Lãnh đạo", "Sách Kỹ năng giao tiếp", "Đọc tài liệu tiếng Anh"],
+        "Giải trí": ["Xem tin tức", "Chơi game (Đế Chế)", "Thư giãn"],
+        "Di chuyển": ["Đi lại công trường", "Về quê / Di chuyển cá nhân"],
+        "Ngủ": ["Ngủ đêm", "Ngủ trưa"]
+    };
+
+    window.addEventListener('load', async () => {
+        const q = new URLSearchParams(location.search);
+        if(q.get('drive_auth_error')) alert('Đăng nhập Google lỗi: ' + q.get('drive_auth_error'));
+        await initDriveSession();
+        if(q.has('drive_auth') || q.has('drive_auth_error')) history.replaceState({}, '', location.pathname);
+    });
+    window.addEventListener('online', () => { if(serverDriveConnected) syncNow(false); });
+    window.addEventListener('offline', () => setDriveState('Ngoại tuyến', false));
+    </script>
+
 </body>
 </html>
