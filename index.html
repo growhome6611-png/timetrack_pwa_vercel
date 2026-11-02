@@ -15,6 +15,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        .time-row{display:grid;grid-template-columns:1fr 118px;gap:8px}
+        .time-date-input,.time-clock-btn{width:100%;border:1px solid #d1d5db;border-radius:.6rem;padding:.6rem .7rem;background:#fff;font-weight:600;outline:none}
+        .time-clock-btn{display:flex;align-items:center;justify-content:center;gap:.45rem;color:#4338ca;background:#eef2ff;border-color:#c7d2fe;font-size:.9rem}
+        .time-clock-btn:active{transform:scale(.98)}
+        #clockPickerModal{touch-action:none}
+        .clock-dialog{width:min(92vw,390px);border-radius:26px;background:#20242e;color:#fff;box-shadow:0 24px 70px rgba(0,0,0,.45);padding:22px}
+        .clock-time-box{min-width:112px;border-radius:18px;padding:12px 18px;background:#343945;color:#fff;font-size:42px;font-weight:700;line-height:1;text-align:center;border:1px solid transparent}
+        .clock-time-box.active{background:#4338ca;border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,.18)}
+        .clock-face{position:relative;width:min(76vw,300px);height:min(76vw,300px);max-width:300px;max-height:300px;margin:18px auto 16px;border-radius:9999px;background:#303641;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);user-select:none;-webkit-user-select:none;touch-action:none}
+        .clock-number{position:absolute;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:9999px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#f3f4f6;z-index:3}
+        .clock-number.inner{font-size:13px;color:#cbd5e1;width:30px;height:30px}
+        .clock-number.selected{background:#a5b4fc;color:#111827;font-weight:800}
+        .clock-hand{position:absolute;left:50%;top:50%;width:2px;background:#a5b4fc;transform-origin:50% 100%;z-index:2;border-radius:9999px;pointer-events:none}
+        .clock-center{position:absolute;left:50%;top:50%;width:8px;height:8px;transform:translate(-50%,-50%);background:#a5b4fc;border-radius:9999px;z-index:4;pointer-events:none}
+        .clock-knob{position:absolute;width:38px;height:38px;transform:translate(-50%,-50%);background:#a5b4fc;border-radius:9999px;z-index:2;pointer-events:none;box-shadow:0 0 0 6px rgba(165,180,252,.08)}
+        .clock-minute-tick{position:absolute;left:50%;top:50%;width:1px;height:7px;background:#64748b;transform-origin:50% 142px;z-index:1;pointer-events:none}
+        .clock-minute-tick.major{height:10px;background:#e5e7eb;width:2px}
+        @media(max-width:380px){.clock-dialog{padding:18px}.clock-time-box{font-size:36px;min-width:98px}.clock-face{width:270px;height:270px}.clock-minute-tick{transform-origin:50% 127px}}
+    </style>
 </head>
 <body class="bg-gray-100 font-sans antialiased text-gray-800">
     <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg flex flex-col relative pb-20">
@@ -174,7 +195,11 @@
                     </div>
                     <div>
                         <label class="block font-semibold text-gray-600 mb-1">Thời gian bắt đầu *</label>
-                        <input type="datetime-local" id="logStartTime" onchange="calculateEndTime()" required class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <input type="hidden" id="logStartTime" required>
+                        <div class="time-row">
+                            <input type="date" id="logStartDate" onchange="syncDatePart('start')" class="time-date-input">
+                            <button type="button" id="logStartTimeBtn" onclick="openClockPicker('start')" class="time-clock-btn"><i class="fa-regular fa-clock"></i><span>00:00</span></button>
+                        </div>
                     </div>
                     <div>
                         <label class="block font-semibold text-gray-600 mb-1">Nhập nhanh thời lượng (Ví dụ: 1h, 30p, 1.5h...)</label>
@@ -182,7 +207,11 @@
                     </div>
                     <div>
                         <label class="block font-semibold text-gray-600 mb-1">Thời gian kết thúc (Tự động tính = Bắt đầu + Thời lượng)</label>
-                        <input type="datetime-local" id="logEndTime" required class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50">
+                        <input type="hidden" id="logEndTime" required>
+                        <div class="time-row">
+                            <input type="date" id="logEndDate" onchange="syncDatePart('end')" class="time-date-input bg-gray-50">
+                            <button type="button" id="logEndTimeBtn" onclick="openClockPicker('end')" class="time-clock-btn"><i class="fa-regular fa-clock"></i><span>00:00</span></button>
+                        </div>
                     </div>
                     <div>
                         <label class="block font-semibold text-gray-600 mb-1">Ghi chú chi tiết</label>
@@ -193,6 +222,26 @@
                         <button type="submit" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold shadow">Lưu lại</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- BỘ CHỌN GIỜ DẠNG ĐỒNG HỒ TRÒN -->
+    <div id="clockPickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/65 z-[80] p-4" onclick="if(event.target===this) closeClockPicker()">
+        <div class="clock-dialog">
+            <div class="text-[22px] font-semibold mb-5">Chọn thời gian</div>
+            <div class="flex items-center justify-center gap-3">
+                <button type="button" id="clockHourBox" class="clock-time-box active" onclick="setClockMode('hour')">00</button>
+                <span class="text-4xl font-bold text-gray-300">:</span>
+                <button type="button" id="clockMinuteBox" class="clock-time-box" onclick="setClockMode('minute')">00</button>
+            </div>
+            <div id="clockFace" class="clock-face"></div>
+            <div class="flex items-center justify-between pt-1">
+                <button type="button" onclick="closeClockPicker()" class="w-10 h-10 flex items-center justify-center text-indigo-200 rounded-lg active:bg-white/10" title="Đóng"><i class="fa-solid fa-keyboard text-xl"></i></button>
+                <div class="flex gap-2">
+                    <button type="button" onclick="closeClockPicker()" class="px-4 py-2.5 text-indigo-200 font-bold rounded-xl active:bg-white/10">Hủy</button>
+                    <button type="button" onclick="confirmClockPicker()" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl shadow-lg active:bg-indigo-500">OK</button>
+                </div>
             </div>
         </div>
     </div>
@@ -239,8 +288,8 @@
             const now = new Date();
             const offset = now.getTimezoneOffset() * 60000;
             const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
-            document.getElementById('logStartTime').value = localISOTime;
-            document.getElementById('logEndTime').value = localISOTime;
+            setDateTimeValue('start', localISOTime);
+            setDateTimeValue('end', localISOTime);
 
             renderCategoryDropdown();
             updateAllUI();
@@ -268,7 +317,7 @@
                 let endDate = new Date(startDate.getTime() + totalMins * 60000);
                 const offset = endDate.getTimezoneOffset() * 60000;
                 let localEndISO = (new Date(endDate - offset)).toISOString().slice(0, 16);
-                document.getElementById('logEndTime').value = localEndISO;
+                setDateTimeValue('end', localEndISO);
             }
         }
 
@@ -346,6 +395,144 @@
             if(curSub) subSel.value = curSub;
         }
 
+        // ===== Bộ chọn giờ dạng đồng hồ tròn =====
+        const clockPickerState = { target:'start', hour:0, minute:0, mode:'hour', dragging:false };
+
+        function pad2(n){ return String(n).padStart(2,'0'); }
+        function splitDateTimeValue(value){
+            const m = String(value || '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+            if(!m) return null;
+            return { date:m[1], hour:+m[2], minute:+m[3] };
+        }
+        function setDateTimeValue(target, value){
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const btn = document.getElementById('log' + prefix + 'TimeBtn');
+            if(!hidden || !dateInput || !btn) return;
+            const parts = splitDateTimeValue(value);
+            if(!parts) return;
+            hidden.value = `${parts.date}T${pad2(parts.hour)}:${pad2(parts.minute)}`;
+            dateInput.value = parts.date;
+            btn.querySelector('span').textContent = `${pad2(parts.hour)}:${pad2(parts.minute)}`;
+        }
+        function syncDatePart(target){
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const current = splitDateTimeValue(hidden.value);
+            const h = current ? current.hour : 0, m = current ? current.minute : 0;
+            hidden.value = `${dateInput.value}T${pad2(h)}:${pad2(m)}`;
+            if(target === 'start') calculateEndTime();
+        }
+        function openClockPicker(target){
+            clockPickerState.target = target;
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const parts = splitDateTimeValue(document.getElementById('log' + prefix + 'Time').value);
+            const now = new Date();
+            clockPickerState.hour = parts ? parts.hour : now.getHours();
+            clockPickerState.minute = parts ? parts.minute : now.getMinutes();
+            clockPickerState.mode = 'hour';
+            const modal = document.getElementById('clockPickerModal');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+            renderClockPicker();
+        }
+        function closeClockPicker(){
+            const modal = document.getElementById('clockPickerModal');
+            modal.classList.add('hidden'); modal.classList.remove('flex');
+            clockPickerState.dragging = false;
+        }
+        function setClockMode(mode){ clockPickerState.mode = mode; renderClockPicker(); }
+        function confirmClockPicker(){
+            const prefix = clockPickerState.target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const current = splitDateTimeValue(hidden.value);
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const date = dateInput.value || (current && current.date) || new Date().toISOString().slice(0,10);
+            setDateTimeValue(clockPickerState.target, `${date}T${pad2(clockPickerState.hour)}:${pad2(clockPickerState.minute)}`);
+            closeClockPicker();
+            if(clockPickerState.target === 'start') calculateEndTime();
+        }
+        function renderClockPicker(){
+            document.getElementById('clockHourBox').textContent = pad2(clockPickerState.hour);
+            document.getElementById('clockMinuteBox').textContent = pad2(clockPickerState.minute);
+            document.getElementById('clockHourBox').classList.toggle('active', clockPickerState.mode==='hour');
+            document.getElementById('clockMinuteBox').classList.toggle('active', clockPickerState.mode==='minute');
+            const face = document.getElementById('clockFace');
+            face.innerHTML = '<div class="clock-center"></div>';
+            if(clockPickerState.mode === 'hour') renderHourFace(face); else renderMinuteFace(face);
+            attachClockPointerHandlers(face);
+        }
+        function polarPoint(angleDeg, radiusPct){
+            const a=(angleDeg-90)*Math.PI/180;
+            return {x:50+Math.cos(a)*radiusPct, y:50+Math.sin(a)*radiusPct};
+        }
+        function addClockNumber(face, label, angle, radius, selected=false, inner=false){
+            const p=polarPoint(angle,radius);
+            const el=document.createElement('div');
+            el.className='clock-number'+(inner?' inner':'')+(selected?' selected':'');
+            el.style.left=p.x+'%'; el.style.top=p.y+'%'; el.textContent=label;
+            face.appendChild(el);
+        }
+        function renderHourFace(face){
+            for(let i=1;i<=12;i++){
+                const angle=(i%12)*30;
+                const outerHour=i;
+                addClockNumber(face,String(outerHour),angle,40,clockPickerState.hour===outerHour,false);
+                const innerHour=i===12 ? 0 : i+12;
+                addClockNumber(face,pad2(innerHour),angle,25,clockPickerState.hour===innerHour,true);
+            }
+            const h=clockPickerState.hour;
+            const isInner=(h===0 || h>12);
+            const dialHour=h===0?12:(h>12?h-12:h);
+            drawClockHand(face,(dialHour%12)*30,isInner?25:40);
+        }
+        function renderMinuteFace(face){
+            for(let i=0;i<60;i++){
+                const tick=document.createElement('div');
+                tick.className='clock-minute-tick'+(i%5===0?' major':'');
+                tick.style.transform=`translate(-50%,-142px) rotate(${i*6}deg)`;
+                face.appendChild(tick);
+            }
+            for(let m=0;m<60;m+=5) addClockNumber(face,pad2(m),m*6,40,clockPickerState.minute===m,false);
+            drawClockHand(face,clockPickerState.minute*6,40);
+        }
+        function drawClockHand(face, angle, radiusPct){
+            const size=face.clientWidth || 300;
+            const radius=size*radiusPct/100;
+            const hand=document.createElement('div');
+            hand.className='clock-hand';
+            hand.style.height=radius+'px';
+            hand.style.top=`calc(50% - ${radius}px)`;
+            hand.style.transform=`translateX(-50%) rotate(${angle}deg)`;
+            face.appendChild(hand);
+            const p=polarPoint(angle,radiusPct);
+            const knob=document.createElement('div'); knob.className='clock-knob'; knob.style.left=p.x+'%'; knob.style.top=p.y+'%'; face.appendChild(knob);
+        }
+        function attachClockPointerHandlers(face){
+            face.onpointerdown=(e)=>{ clockPickerState.dragging=true; try{face.setPointerCapture(e.pointerId)}catch(_){}; updateClockFromPointer(e,face,false); };
+            face.onpointermove=(e)=>{ if(clockPickerState.dragging) updateClockFromPointer(e,face,false); };
+            face.onpointerup=(e)=>{ if(!clockPickerState.dragging) return; updateClockFromPointer(e,face,true); clockPickerState.dragging=false; };
+            face.onpointercancel=()=>clockPickerState.dragging=false;
+        }
+        function updateClockFromPointer(e,face,finish){
+            const r=face.getBoundingClientRect();
+            const cx=r.left+r.width/2, cy=r.top+r.height/2;
+            const dx=e.clientX-cx, dy=e.clientY-cy;
+            let deg=(Math.atan2(dy,dx)*180/Math.PI+450)%360;
+            const dist=Math.sqrt(dx*dx+dy*dy);
+            if(clockPickerState.mode==='hour'){
+                let dial=Math.round(deg/30)%12; if(dial===0) dial=12;
+                const inner=dist < r.width*0.33;
+                clockPickerState.hour=inner ? (dial===12?0:dial+12) : dial;
+                renderClockPicker();
+                if(finish){ setTimeout(()=>{ clockPickerState.mode='minute'; renderClockPicker(); },120); }
+            } else {
+                clockPickerState.minute=Math.round(deg/6)%60;
+                renderClockPicker();
+            }
+        }
+
         function openLogModal(editId = null) {
             document.getElementById('logModal').classList.remove('hidden');
             renderCategoryDropdown();
@@ -357,8 +544,8 @@
                     document.getElementById('logCategory').value = log.category;
                     updateSubCategories();
                     document.getElementById('logSubCategory').value = log.subCategory;
-                    document.getElementById('logStartTime').value = log.startTime;
-                    document.getElementById('logEndTime').value = log.endTime;
+                    setDateTimeValue('start', log.startTime);
+                    setDateTimeValue('end', log.endTime);
                     document.getElementById('logDurationInput').value = '';
                     document.getElementById('logNote').value = log.note || '';
                 }
@@ -369,8 +556,8 @@
                 const now = new Date();
                 const offset = now.getTimezoneOffset() * 60000;
                 let isoTime = (new Date(now - offset)).toISOString().slice(0, 16);
-                document.getElementById('logStartTime').value = isoTime;
-                document.getElementById('logEndTime').value = isoTime;
+                setDateTimeValue('start', isoTime);
+                setDateTimeValue('end', isoTime);
                 renderCategoryDropdown();
             }
         }
