@@ -180,6 +180,10 @@
                 <form id="logForm" onsubmit="saveLog(event)" class="space-y-3 text-xs">
                     <input type="hidden" id="editLogId">
                     <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Ghi chú chi tiết</label>
+                        <input type="text" id="logNote" placeholder="Ví dụ: Kiểm tra tiến độ khu A06..." class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
                         <div class="flex justify-between items-center mb-1">
                             <label class="font-semibold text-gray-600">Danh mục chính *</label>
                             <button type="button" onclick="addNewCategoryPrompt()" class="text-indigo-600 font-bold hover:underline">+ Thêm danh mục</button>
@@ -202,7 +206,7 @@
                         </div>
                     </div>
                     <div>
-                        <label class="block font-semibold text-gray-600 mb-1">Nhập nhanh thời lượng (Ví dụ: 1h, 30p, 1.5h...)</label>
+                        <label class="block font-semibold text-gray-600 mb-1">Nhập nhanh thời lượng <span class="font-normal text-gray-400">(để trống = tự tính đến ghi chú tiếp theo)</span></label>
                         <input type="text" id="logDurationInput" placeholder="VD: 1h30m hoặc 45p hoặc 2h" oninput="calculateEndTime()" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-600">
                     </div>
                     <div>
@@ -212,10 +216,6 @@
                             <input type="date" id="logEndDate" onchange="syncDatePart('end')" class="time-date-input bg-gray-50">
                             <button type="button" id="logEndTimeBtn" onclick="openClockPicker('end')" class="time-clock-btn"><i class="fa-regular fa-clock"></i><span>00:00</span></button>
                         </div>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-gray-600 mb-1">Ghi chú chi tiết</label>
-                        <input type="text" id="logNote" placeholder="Ví dụ: Kiểm tra tiến độ khu A06..." class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
                     </div>
                     <div class="flex gap-2 pt-2">
                         <button type="button" onclick="closeLogModal()" class="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg font-bold">Hủy</button>
@@ -319,6 +319,35 @@
                 let localEndISO = (new Date(endDate - offset)).toISOString().slice(0, 16);
                 setDateTimeValue('end', localEndISO);
             }
+        }
+
+        // Các bản ghi có autoEnd=true sẽ tự lấy giờ bắt đầu của bản ghi kế tiếp làm giờ kết thúc.
+        // Nếu chưa có bản ghi kế tiếp, endTime tạm bằng startTime (thời lượng = 0).
+        function recalculateAutoEndLogs() {
+            const ordered = [...db.logs].sort((a,b) => new Date(a.startTime) - new Date(b.startTime));
+            for(let i = 0; i < ordered.length; i++) {
+                const log = ordered[i];
+                if(log.autoEnd !== true) continue;
+
+                let next = null;
+                for(let j = i + 1; j < ordered.length; j++) {
+                    if(new Date(ordered[j].startTime) > new Date(log.startTime)) {
+                        next = ordered[j];
+                        break;
+                    }
+                }
+                log.endTime = next ? next.startTime : log.startTime;
+            }
+        }
+
+        function formatDurationForInput(startTime, endTime) {
+            const mins = Math.max(0, Math.round((new Date(endTime) - new Date(startTime)) / 60000));
+            if(!mins) return '';
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            if(h && m) return `${h}h${m}p`;
+            if(h) return `${h}h`;
+            return `${m}p`;
         }
 
         function parseDurationToMinutes(str) {
@@ -546,7 +575,7 @@
                     document.getElementById('logSubCategory').value = log.subCategory;
                     setDateTimeValue('start', log.startTime);
                     setDateTimeValue('end', log.endTime);
-                    document.getElementById('logDurationInput').value = '';
+                    document.getElementById('logDurationInput').value = log.autoEnd === true ? '' : formatDurationForInput(log.startTime, log.endTime);
                     document.getElementById('logNote').value = log.note || '';
                 }
             } else {
@@ -569,8 +598,26 @@
             const category = document.getElementById('logCategory').value;
             const subCategory = document.getElementById('logSubCategory').value;
             const startTime = document.getElementById('logStartTime').value;
-            const endTime = document.getElementById('logEndTime').value;
             const note = document.getElementById('logNote').value;
+            const durationStr = document.getElementById('logDurationInput').value.trim();
+            const autoEnd = durationStr === '';
+
+            let endTime = document.getElementById('logEndTime').value;
+            if(autoEnd) {
+                // Chưa có ghi chú tiếp theo: tạm kết thúc tại chính thời điểm bắt đầu.
+                // recalculateAutoEndLogs() sẽ cập nhật lại ngay khi có bản ghi kế tiếp.
+                endTime = startTime;
+            } else {
+                const mins = parseDurationToMinutes(durationStr);
+                if(mins <= 0) {
+                    alert('Thời lượng không hợp lệ. Ví dụ: 45p, 1h30p hoặc 2h.');
+                    return;
+                }
+                const start = new Date(startTime);
+                const end = new Date(start.getTime() + mins * 60000);
+                const offset = end.getTimezoneOffset() * 60000;
+                endTime = (new Date(end - offset)).toISOString().slice(0, 16);
+            }
 
             if(new Date(startTime) > new Date(endTime)) {
                 alert("Thời gian bắt đầu không thể sau thời gian kết thúc!");
@@ -585,14 +632,18 @@
                     log.startTime = startTime;
                     log.endTime = endTime;
                     log.note = note;
+                    log.autoEnd = autoEnd;
                 }
             } else {
                 db.logs.push({
                     id: Date.now(),
-                    category, subCategory, startTime, endTime, note
+                    category, subCategory, startTime, endTime, note, autoEnd
                 });
             }
 
+            // Sau mỗi lần thêm/sửa, tính lại toàn bộ bản ghi tự động theo thứ tự thời gian.
+            // Nhờ vậy nếu bạn chèn một ghi chú vào giữa, bản ghi trước đó vẫn được chốt đúng.
+            recalculateAutoEndLogs();
             db.logs.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
             saveData();
             closeLogModal();
@@ -602,6 +653,7 @@
             event.stopPropagation();
             if(confirm("Bạn có chắc muốn xóa ghi nhận này?")) {
                 db.logs = db.logs.filter(l => l.id !== id);
+                recalculateAutoEndLogs();
                 saveData();
             }
         }
