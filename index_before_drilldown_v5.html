@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý & Theo Dõi Thời Gian Cá Nhân</title>
+    <meta name="theme-color" content="#4338ca">
+    <meta name="app-version" content="timetrack-drive-v2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Quản Lý Thời Gian">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        .time-row{display:grid;grid-template-columns:1fr 118px;gap:8px}
+        .time-date-input,.time-clock-btn{width:100%;border:1px solid #d1d5db;border-radius:.6rem;padding:.6rem .7rem;background:#fff;font-weight:600;outline:none}
+        .time-clock-btn{display:flex;align-items:center;justify-content:center;gap:.45rem;color:#4338ca;background:#eef2ff;border-color:#c7d2fe;font-size:.9rem}
+        .time-clock-btn:active{transform:scale(.98)}
+        #clockPickerModal{touch-action:none}
+        .clock-dialog{width:min(92vw,390px);border-radius:26px;background:#20242e;color:#fff;box-shadow:0 24px 70px rgba(0,0,0,.45);padding:22px}
+        .clock-time-box{min-width:112px;border-radius:18px;padding:12px 18px;background:#343945;color:#fff;font-size:42px;font-weight:700;line-height:1;text-align:center;border:1px solid transparent}
+        .clock-time-box.active{background:#4338ca;border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,.18)}
+        .clock-face{position:relative;width:min(76vw,300px);height:min(76vw,300px);max-width:300px;max-height:300px;margin:18px auto 16px;border-radius:9999px;background:#303641;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);user-select:none;-webkit-user-select:none;touch-action:none}
+        .clock-number{position:absolute;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:9999px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#f3f4f6;z-index:3}
+        .clock-number.inner{font-size:13px;color:#cbd5e1;width:30px;height:30px}
+        .clock-number.selected{background:#a5b4fc;color:#111827;font-weight:800}
+        .clock-hand{position:absolute;left:50%;top:50%;width:2px;background:#a5b4fc;transform-origin:50% 100%;z-index:2;border-radius:9999px;pointer-events:none}
+        .clock-center{position:absolute;left:50%;top:50%;width:8px;height:8px;transform:translate(-50%,-50%);background:#a5b4fc;border-radius:9999px;z-index:4;pointer-events:none}
+        .clock-knob{position:absolute;width:38px;height:38px;transform:translate(-50%,-50%);background:#a5b4fc;border-radius:9999px;z-index:2;pointer-events:none;box-shadow:0 0 0 6px rgba(165,180,252,.08)}
+        .clock-minute-tick{position:absolute;left:50%;top:50%;width:1px;height:7px;background:#64748b;transform-origin:50% 142px;z-index:1;pointer-events:none}
+        .clock-minute-tick.major{height:10px;background:#e5e7eb;width:2px}
+        @media(max-width:380px){.clock-dialog{padding:18px}.clock-time-box{font-size:36px;min-width:98px}.clock-face{width:270px;height:270px}.clock-minute-tick{transform-origin:50% 127px}}
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased text-gray-800">
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg flex flex-col relative pb-20">
+        <!-- Header -->
+        <header class="bg-indigo-700 text-white p-4 sticky top-0 z-20 shadow">
+            <div class="flex justify-between items-center mb-2">
+                <h1 class="text-base font-bold flex items-center gap-1.5"><i class="fa-solid fa-clock"></i> Quản Lý Thời Gian</h1>
+                <div class="flex gap-2">
+                    <button onclick="openDrivePanel()" title="Tài khoản & Đồng bộ" class="bg-amber-500 hover:bg-amber-400 px-2.5 py-1 rounded text-xs font-bold"><i class="fa-brands fa-google-drive mr-1"></i>Drive</button>
+                    <button onclick="exportData()" title="Xuất dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-download"></i></button>
+                    <button onclick="document.getElementById('importFile').click()" title="Nhập dữ liệu" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs"><i class="fa-solid fa-upload"></i></button>
+                    <input type="file" id="importFile" class="hidden" onchange="importData(event)">
+                    <button id="installAppBtn" class="hidden bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded text-xs" title="Cài ứng dụng"><i class="fa-solid fa-mobile-screen-button"></i></button>
+                </div>
+            </div>
+
+            <!-- Tài khoản Google Drive -->
+            <div class="w-full mb-2 bg-indigo-800/80 rounded-lg px-3 py-2 text-xs border border-indigo-500/40">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-user text-indigo-200"></i>
+                        <span id="driveAccountEmail" class="truncate font-semibold">Chưa kết nối Google Drive</span>
+                    </div>
+                    <span id="driveAccountBadge" class="bg-indigo-600 px-2 py-0.5 rounded text-[10px] font-bold">Cục bộ</span>
+                </div>
+                <div class="flex gap-2 mt-2 flex-wrap">
+                    <button id="driveLoginBtn" onclick="connectGoogleDrive(false)" class="bg-white text-indigo-700 px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-brands fa-google mr-1"></i>Đăng nhập Google</button>
+                    <button id="driveSyncBtn" onclick="syncNow()" class="hidden bg-sky-600 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-cloud mr-1"></i><span id="driveSyncText">Đồng bộ</span></button>
+                    <button id="driveSwitchBtn" onclick="switchGoogleAccount()" class="hidden bg-amber-500 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-right-left mr-1"></i>Đổi TK</button>
+                    <button id="driveLogoutBtn" onclick="signOutGoogleDrive()" class="hidden bg-rose-600 text-white px-2.5 py-1.5 rounded text-[10px] font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Thoát</button>
+                </div>
+            </div>
+            <!-- Tổng quan ngày -->
+            <div class="bg-indigo-800/60 rounded-xl p-3 backdrop-blur-sm">
+                <p class="text-xs text-indigo-200">Tổng thời gian ghi nhận hôm nay</p>
+                <h2 id="totalTimeToday" class="text-2xl font-extrabold tracking-tight">0 giờ 0 phút</h2>
+                <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-indigo-600/50 text-xs">
+                    <div><span class="text-indigo-300">Làm việc:</span> <span id="summaryWork" class="font-bold">0 phút</span></div>
+                    <div><span class="text-indigo-300">Phát triển bản thân (Đọc/Tập):</span> <span id="summaryGrowth" class="font-bold">0 phút</span></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex bg-white border-b border-gray-200 overflow-x-auto text-xs font-semibold sticky top-[198px] z-10 shadow-sm">
+            <button onclick="switchTab('logs')" id="nav-logs" class="flex-1 py-3 px-2 text-center border-b-2 border-indigo-600 text-indigo-700 whitespace-nowrap"><i class="fa-solid fa-list-check mr-1"></i> Nhật Ký</button>
+            <button onclick="switchTab('analytics')" id="nav-analytics" class="flex-1 py-3 px-2 text-center border-b-2 border-transparent text-gray-500 whitespace-nowrap"><i class="fa-solid fa-chart-pie mr-1"></i> Thống Kê</button>
+        </nav>
+
+        <!-- Main Content Container -->
+        <main class="flex-1 p-3 overflow-y-auto">
+            <!-- TAB 1: NHẬT KÝ THỜI GIAN -->
+            <section id="tab-logs" class="space-y-3">
+                <div class="bg-gray-50 p-2.5 rounded-lg border border-gray-200 text-xs space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Lọc theo ngày nhật ký</span>
+                        <input type="date" id="filterDate" onchange="renderLogs()" class="bg-white border rounded p-1 text-xs font-medium">
+                    </div>
+                </div>
+
+                <!-- Biểu đồ nhanh trong ngày -->
+                <div class="bg-white p-3 rounded-xl border shadow-sm space-y-2">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <h3 class="text-xs font-bold text-gray-600">Phân bổ thời gian ngày đã chọn</h3>
+                        <div class="flex gap-1.5">
+                            <select id="dailyChartType" onchange="renderLogs()" class="border rounded-lg px-2 py-1 text-[11px] bg-white">
+                                <option value="doughnut">Vòng tròn</option>
+                                <option value="pie">Tròn</option>
+                                <option value="bar">Cột đứng</option>
+                                <option value="horizontalBar">Cột ngang</option>
+                            </select>
+                            <select id="dailySort" onchange="renderLogs()" class="border rounded-lg px-2 py-1 text-[11px] bg-white">
+                                <option value="time_desc">Thời gian ↓</option>
+                                <option value="time_asc">Thời gian ↑</option>
+                                <option value="name_asc">Tên A-Z</option>
+                                <option value="name_desc">Tên Z-A</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="w-full h-48 flex justify-center"><canvas id="dailyPieChart"></canvas></div>
+                    <div id="dailyChartSummary" class="grid grid-cols-1 gap-1 text-[11px]"></div>
+                </div>
+
+                <button onclick="openLogModal()" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-xs font-bold shadow"><i class="fa-solid fa-plus mr-1"></i> Ghi Nhận Hoạt Động Mới</button>
+                <div class="text-[11px] text-gray-400 italic text-center">* Chạm vào mục bất kỳ để chỉnh sửa hoặc xóa</div>
+                <div id="logList" class="space-y-2"></div>
+            </section>
+
+            <!-- TAB 2: THỐNG KÊ TỔNG QUAN -->
+            <section id="tab-analytics" class="space-y-4 hidden">
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Bộ lọc thống kê thời gian</span>
+                        <select id="analyticsTimeFilter" onchange="handleAnalyticsFilterChange()" class="bg-white border rounded p-1 text-xs font-medium">
+                            <option value="TODAY">Hôm nay</option>
+                            <option value="WEEK">Tuần này</option>
+                            <option value="MONTH" selected>Tháng này</option>
+                            <option value="YEAR">Năm nay</option>
+                            <option value="SPECIFIC_DATE">Ngày cụ thể</option>
+                            <option value="SPECIFIC_MONTH">Tháng cụ thể</option>
+                            <option value="CUSTOM_YEAR">Năm cụ thể</option>
+                        </select>
+                    </div>
+
+                    <div id="analyticsDateContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn ngày:</span>
+                        <input type="date" id="analyticsDateInput" onchange="renderAnalyticsCharts()" class="border rounded p-1 text-xs">
+                    </div>
+                    <div id="analyticsMonthContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn tháng:</span>
+                        <input type="month" id="analyticsMonthInput" onchange="renderAnalyticsCharts()" class="border rounded p-1 text-xs">
+                    </div>
+                    <div id="analyticsYearContainer" class="hidden flex items-center gap-2">
+                        <span class="text-gray-500">Chọn năm:</span>
+                        <input type="number" id="analyticsYearInput" value="2026" onchange="renderAnalyticsCharts()" class="border rounded p-1 w-20 text-xs">
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-xl border shadow-sm space-y-2">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <h3 id="analyticsChartTitle" class="text-xs font-bold text-gray-700">Tỷ trọng thời gian theo danh mục</h3>
+                            <div id="analyticsTotalText" class="text-[11px] text-gray-400 mt-0.5"></div>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <select id="analyticsChartType" onchange="renderAnalyticsCharts()" class="border rounded-lg px-2 py-1 text-[11px] bg-white">
+                                <option value="doughnut">Vòng tròn</option>
+                                <option value="pie">Tròn</option>
+                                <option value="bar">Cột đứng</option>
+                                <option value="horizontalBar">Cột ngang</option>
+                            </select>
+                            <select id="analyticsSort" onchange="renderAnalyticsCharts()" class="border rounded-lg px-2 py-1 text-[11px] bg-white">
+                                <option value="time_desc">Thời gian ↓</option>
+                                <option value="time_asc">Thời gian ↑</option>
+                                <option value="name_asc">Tên A-Z</option>
+                                <option value="name_desc">Tên Z-A</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="w-full h-64 flex justify-center"><canvas id="totalAnalyticsChart"></canvas></div>
+                    <div id="analyticsChartSummary" class="grid grid-cols-1 gap-1 text-[11px]"></div>
+                </div>
+
+                <!-- Tra cứu tuần -->
+                <div class="bg-white p-3 rounded-xl border shadow-sm space-y-3">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <h3 class="text-xs font-bold text-gray-700"><i class="fa-solid fa-calendar-week mr-1 text-indigo-600"></i>Tổng hợp công việc theo tuần</h3>
+                            <p class="text-[10px] text-gray-400 mt-0.5">Tổng thời gian từng loại công việc và checklist chi tiết theo ngày</p>
+                        </div>
+                        <input type="week" id="weeklyLookupInput" onchange="renderWeeklyLookup()" class="border rounded-lg px-2 py-1.5 text-[11px] bg-white">
+                    </div>
+                    <div id="weeklyRangeText" class="text-[11px] font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2.5 py-2"></div>
+                    <div>
+                        <h4 class="text-[11px] font-bold text-gray-600 mb-1.5">Tổng thời gian theo loại công việc</h4>
+                        <div id="weeklyCategorySummary" class="space-y-1"></div>
+                    </div>
+                    <div>
+                        <h4 class="text-[11px] font-bold text-gray-600 mb-1.5">Checklist theo ngày</h4>
+                        <div id="weeklyDayChecklist" class="space-y-2"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Floating Action Button -->
+        <button onclick="openLogModal()" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-xl z-35 transition-transform active:scale-95">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+
+        <!-- PANEL GOOGLE DRIVE -->
+        <div id="drivePanel" class="fixed inset-0 bg-black/50 z-[90] hidden flex items-end sm:items-center justify-center">
+            <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 text-xs">
+                <div class="flex justify-between items-center border-b pb-2 mb-3">
+                    <h3 class="font-bold text-sm text-indigo-700"><i class="fa-brands fa-google-drive mr-1"></i> Tài khoản & Đồng bộ Drive</h3>
+                    <button onclick="closeDrivePanel()" class="text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-2.5">
+                    <div class="bg-gray-50 rounded-lg p-3 border"><span class="text-gray-500">Tài khoản:</span><br><strong id="drivePanelEmail" class="text-sm">Chưa kết nối</strong></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="pullCloudData(true)" class="bg-sky-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-cloud-arrow-down mr-1"></i>Tải từ Drive</button>
+                        <button onclick="pushCloudData(true)" class="bg-indigo-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Đẩy lên Drive</button>
+                    </div>
+                    <button onclick="syncNow()" class="w-full bg-violet-600 text-white py-2.5 rounded-lg font-bold"><i class="fa-solid fa-rotate mr-1"></i>Đồng bộ 2 chiều</button>
+                    <button onclick="switchGoogleAccount()" class="w-full bg-amber-100 text-amber-800 border border-amber-300 py-2.5 rounded-lg font-bold"><i class="fa-solid fa-user-gear mr-1"></i>Đổi Gmail</button>
+                    <button onclick="signOutGoogleDrive()" class="w-full bg-rose-50 text-rose-700 border border-rose-200 py-2.5 rounded-lg font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Đăng xuất</button>
+                    <p class="text-[10px] text-gray-400 text-center">Dữ liệu vẫn lưu cục bộ để dùng offline và đồng bộ vào Google Drive của Gmail đang kết nối.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL THÊM / SỬA HOẠT ĐỘNG -->
+        <div id="logModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                    <h3 id="modalTitle" class="font-bold text-sm text-indigo-700"><i class="fa-solid fa-pen-to-square mr-1"></i> Ghi Nhận Thời Gian</h3>
+                    <button onclick="closeLogModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <form id="logForm" onsubmit="saveLog(event)" class="space-y-3 text-xs">
+                    <input type="hidden" id="editLogId">
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Ghi chú chi tiết</label>
+                        <input type="text" id="logNote" placeholder="Ví dụ: Kiểm tra tiến độ khu A06..." class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="font-semibold text-gray-600">Danh mục chính *</label>
+                            <button type="button" onclick="addNewCategoryPrompt()" class="text-indigo-600 font-bold hover:underline">+ Thêm danh mục</button>
+                        </div>
+                        <select id="logCategory" onchange="updateSubCategories()" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-medium"></select>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="font-semibold text-gray-600">Công việc cụ thể *</label>
+                            <button type="button" onclick="addNewSubCategoryPrompt()" class="text-indigo-600 font-bold hover:underline">+ Thêm việc cụ thể</button>
+                        </div>
+                        <select id="logSubCategory" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-medium"></select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Thời gian bắt đầu *</label>
+                        <input type="hidden" id="logStartTime" required>
+                        <div class="time-row">
+                            <input type="date" id="logStartDate" onchange="syncDatePart('start')" class="time-date-input">
+                            <button type="button" id="logStartTimeBtn" onclick="openClockPicker('start')" class="time-clock-btn"><i class="fa-regular fa-clock"></i><span>00:00</span></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Nhập nhanh thời lượng <span class="font-normal text-gray-400">(để trống = tự tính đến ghi chú tiếp theo)</span></label>
+                        <input type="text" id="logDurationInput" placeholder="VD: 1h30m hoặc 45p hoặc 2h" oninput="calculateEndTime()" class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-600">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-gray-600 mb-1">Thời gian kết thúc (Tự động tính = Bắt đầu + Thời lượng)</label>
+                        <input type="hidden" id="logEndTime" required>
+                        <div class="time-row">
+                            <input type="date" id="logEndDate" onchange="syncDatePart('end')" class="time-date-input bg-gray-50">
+                            <button type="button" id="logEndTimeBtn" onclick="openClockPicker('end')" class="time-clock-btn"><i class="fa-regular fa-clock"></i><span>00:00</span></button>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button type="button" onclick="closeLogModal()" class="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-lg font-bold">Hủy</button>
+                        <button type="submit" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-bold shadow">Lưu lại</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- BỘ CHỌN GIỜ DẠNG ĐỒNG HỒ TRÒN -->
+    <div id="clockPickerModal" class="fixed inset-0 hidden items-center justify-center bg-black/65 z-[80] p-4" onclick="if(event.target===this) closeClockPicker()">
+        <div class="clock-dialog">
+            <div class="text-[22px] font-semibold mb-5">Chọn thời gian</div>
+            <div class="flex items-center justify-center gap-3">
+                <button type="button" id="clockHourBox" class="clock-time-box active" onclick="setClockMode('hour')">00</button>
+                <span class="text-4xl font-bold text-gray-300">:</span>
+                <button type="button" id="clockMinuteBox" class="clock-time-box" onclick="setClockMode('minute')">00</button>
+            </div>
+            <div id="clockFace" class="clock-face"></div>
+            <div class="flex items-center justify-between pt-1">
+                <button type="button" onclick="closeClockPicker()" class="w-10 h-10 flex items-center justify-center text-indigo-200 rounded-lg active:bg-white/10" title="Đóng"><i class="fa-solid fa-keyboard text-xl"></i></button>
+                <div class="flex gap-2">
+                    <button type="button" onclick="closeClockPicker()" class="px-4 py-2.5 text-indigo-200 font-bold rounded-xl active:bg-white/10">Hủy</button>
+                    <button type="button" onclick="confirmClockPicker()" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl shadow-lg active:bg-indigo-500">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let db = JSON.parse(localStorage.getItem('timetrack_db_v2')) || {
+            categories: {
+                "Làm việc": ["Đi kiểm tra hiện trường", "Nhắc nhở thi công", "Xem tin nhắn nhóm", "Lập tiến độ & Hồ sơ", "Họp & Trao đổi"],
+                "Ăn uống": ["Ăn sáng", "Ăn trưa", "Ăn tối", "Cà phê / Giải khát"],
+                "Tập thể dục": ["Đi bộ", "Hít xà / Thể hình", "Bát Đoạn Cẩm & Thái Cực Quyền"],
+                "Đọc sách": ["Sách Quản lý & Lãnh đạo", "Sách Kỹ năng giao tiếp", "Đọc tài liệu tiếng Anh"],
+                "Giải trí": ["Xem tin tức", "Chơi game (Đế Chế)", "Thư giãn"],
+                "Di chuyển": ["Đi lại công trường", "Về quê / Di chuyển cá nhân"],
+                "Ngủ": ["Ngủ đêm", "Ngủ trưa"]
+            },
+            logs: []
+        };
+
+        let dailyPieChartInstance = null;
+        let totalAnalyticsChartInstance = null;
+
+        function saveData() {
+            localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+            updateAllUI();
+        }
+
+        function switchTab(tabId) {
+            ['logs', 'analytics'].forEach(id => {
+                document.getElementById('tab-' + id).classList.add('hidden');
+                document.getElementById('nav-' + id).className = "flex-1 py-3 px-2 text-center border-b-2 border-transparent text-gray-500 whitespace-nowrap text-xs";
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('nav-' + tabId).className = "flex-1 py-3 px-2 text-center border-b-2 border-indigo-600 text-indigo-700 font-bold whitespace-nowrap text-xs";
+            if(tabId === 'analytics') renderAnalyticsCharts();
+        }
+
+        function initApp() {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            document.getElementById('filterDate').value = todayStr;
+            document.getElementById('analyticsDateInput').value = todayStr;
+            document.getElementById('weeklyLookupInput').value = getISOWeekValue(new Date());
+            document.getElementById('analyticsMonthInput').value = todayStr.slice(0, 7);
+
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
+            setDateTimeValue('start', localISOTime);
+            setDateTimeValue('end', localISOTime);
+
+            renderCategoryDropdown();
+            updateAllUI();
+        }
+
+        function updateAllUI() {
+            renderLogs();
+            updateSummaryCards();
+            if(!document.getElementById('tab-analytics').classList.contains('hidden')) {
+                renderAnalyticsCharts();
+            }
+        }
+
+        // Tự động tính thời gian kết thúc từ thời gian bắt đầu + thời lượng nhập nhanh
+        function calculateEndTime() {
+            const startVal = document.getElementById('logStartTime').value;
+            const durationStr = document.getElementById('logDurationInput').value.trim();
+            if(!startVal) return;
+
+            let startDate = new Date(startVal);
+            if(isNaN(startDate.getTime())) return;
+
+            let totalMins = parseDurationToMinutes(durationStr);
+            if(totalMins > 0) {
+                let endDate = new Date(startDate.getTime() + totalMins * 60000);
+                const offset = endDate.getTimezoneOffset() * 60000;
+                let localEndISO = (new Date(endDate - offset)).toISOString().slice(0, 16);
+                setDateTimeValue('end', localEndISO);
+            }
+        }
+
+        // Các bản ghi có autoEnd=true sẽ tự lấy giờ bắt đầu của bản ghi kế tiếp làm giờ kết thúc.
+        // Nếu chưa có bản ghi kế tiếp, endTime tạm bằng startTime (thời lượng = 0).
+        function recalculateAutoEndLogs() {
+            const ordered = [...db.logs].sort((a,b) => new Date(a.startTime) - new Date(b.startTime));
+            for(let i = 0; i < ordered.length; i++) {
+                const log = ordered[i];
+                if(log.autoEnd !== true) continue;
+
+                let next = null;
+                for(let j = i + 1; j < ordered.length; j++) {
+                    if(new Date(ordered[j].startTime) > new Date(log.startTime)) {
+                        next = ordered[j];
+                        break;
+                    }
+                }
+                log.endTime = next ? next.startTime : log.startTime;
+            }
+        }
+
+        function formatDurationForInput(startTime, endTime) {
+            const mins = Math.max(0, Math.round((new Date(endTime) - new Date(startTime)) / 60000));
+            if(!mins) return '';
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            if(h && m) return `${h}h${m}p`;
+            if(h) return `${h}h`;
+            return `${m}p`;
+        }
+
+        function parseDurationToMinutes(str) {
+            if(!str) return 0;
+            str = str.toLowerCase().replace(/\s+/g, '');
+            let totalMins = 0;
+
+            let hMatch = str.match(/(\d+(?:\.\d+)?)h/);
+            let mMatch = str.match(/(\d+)p|(\d+)m/);
+
+            let hours = hMatch ? parseFloat(hMatch[1]) : 0;
+            let mins = mMatch ? parseInt(mMatch[1] || mMatch[2]) : 0;
+
+            if(!hMatch && !mMatch && !isNaN(str)) {
+                // Nếu chỉ nhập số thuần túy, mặc định là phút
+                totalMins = parseInt(str);
+            } else {
+                totalMins = Math.round(hours * 60 + mins);
+            }
+            return totalMins;
+        }
+
+        function addNewCategoryPrompt() {
+            const cat = prompt("Nhập tên danh mục chính mới:");
+            if(cat && cat.trim() !== '') {
+                if(!db.categories[cat.trim()]) {
+                    db.categories[cat.trim()] = ["Hoạt động chung"];
+                    saveData();
+                    renderCategoryDropdown();
+                    document.getElementById('logCategory').value = cat.trim();
+                    updateSubCategories();
+                } else {
+                    alert("Danh mục này đã tồn tại!");
+                }
+            }
+        }
+
+        function addNewSubCategoryPrompt() {
+            const cat = document.getElementById('logCategory').value;
+            const sub = prompt(`Nhập việc cụ thể cho danh mục [${cat}]:`);
+            if(sub && sub.trim() !== '') {
+                if(!db.categories[cat].includes(sub.trim())) {
+                    db.categories[cat].push(sub.trim());
+                    saveData();
+                    updateSubCategories();
+                    document.getElementById('logSubCategory').value = sub.trim();
+                } else {
+                    alert("Việc này đã tồn tại trong danh mục!");
+                }
+            }
+        }
+
+        function renderCategoryDropdown() {
+            const catSel = document.getElementById('logCategory');
+            let cur = catSel.value;
+            catSel.innerHTML = '';
+            Object.keys(db.categories).forEach(cat => {
+                catSel.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+            if(cur && db.categories[cur]) catSel.value = cur;
+            updateSubCategories();
+        }
+
+        function updateSubCategories() {
+            const cat = document.getElementById('logCategory').value;
+            const subSel = document.getElementById('logSubCategory');
+            let curSub = subSel.value;
+            subSel.innerHTML = '';
+            if(db.categories[cat]) {
+                db.categories[cat].forEach(sub => {
+                    subSel.innerHTML += `<option value="${sub}">${sub}</option>`;
+                });
+            }
+            if(curSub) subSel.value = curSub;
+        }
+
+        // ===== Bộ chọn giờ dạng đồng hồ tròn =====
+        const clockPickerState = { target:'start', hour:0, minute:0, mode:'hour', dragging:false };
+
+        function pad2(n){ return String(n).padStart(2,'0'); }
+        function splitDateTimeValue(value){
+            const m = String(value || '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+            if(!m) return null;
+            return { date:m[1], hour:+m[2], minute:+m[3] };
+        }
+        function setDateTimeValue(target, value){
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const btn = document.getElementById('log' + prefix + 'TimeBtn');
+            if(!hidden || !dateInput || !btn) return;
+            const parts = splitDateTimeValue(value);
+            if(!parts) return;
+            hidden.value = `${parts.date}T${pad2(parts.hour)}:${pad2(parts.minute)}`;
+            dateInput.value = parts.date;
+            btn.querySelector('span').textContent = `${pad2(parts.hour)}:${pad2(parts.minute)}`;
+        }
+        function syncDatePart(target){
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const current = splitDateTimeValue(hidden.value);
+            const h = current ? current.hour : 0, m = current ? current.minute : 0;
+            hidden.value = `${dateInput.value}T${pad2(h)}:${pad2(m)}`;
+            if(target === 'start') calculateEndTime();
+        }
+        function openClockPicker(target){
+            clockPickerState.target = target;
+            const prefix = target === 'start' ? 'Start' : 'End';
+            const parts = splitDateTimeValue(document.getElementById('log' + prefix + 'Time').value);
+            const now = new Date();
+            clockPickerState.hour = parts ? parts.hour : now.getHours();
+            clockPickerState.minute = parts ? parts.minute : now.getMinutes();
+            clockPickerState.mode = 'hour';
+            const modal = document.getElementById('clockPickerModal');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+            renderClockPicker();
+        }
+        function closeClockPicker(){
+            const modal = document.getElementById('clockPickerModal');
+            modal.classList.add('hidden'); modal.classList.remove('flex');
+            clockPickerState.dragging = false;
+        }
+        function setClockMode(mode){ clockPickerState.mode = mode; renderClockPicker(); }
+        function confirmClockPicker(){
+            const prefix = clockPickerState.target === 'start' ? 'Start' : 'End';
+            const hidden = document.getElementById('log' + prefix + 'Time');
+            const current = splitDateTimeValue(hidden.value);
+            const dateInput = document.getElementById('log' + prefix + 'Date');
+            const date = dateInput.value || (current && current.date) || new Date().toISOString().slice(0,10);
+            setDateTimeValue(clockPickerState.target, `${date}T${pad2(clockPickerState.hour)}:${pad2(clockPickerState.minute)}`);
+            closeClockPicker();
+            if(clockPickerState.target === 'start') calculateEndTime();
+        }
+        function renderClockPicker(){
+            document.getElementById('clockHourBox').textContent = pad2(clockPickerState.hour);
+            document.getElementById('clockMinuteBox').textContent = pad2(clockPickerState.minute);
+            document.getElementById('clockHourBox').classList.toggle('active', clockPickerState.mode==='hour');
+            document.getElementById('clockMinuteBox').classList.toggle('active', clockPickerState.mode==='minute');
+            const face = document.getElementById('clockFace');
+            face.innerHTML = '<div class="clock-center"></div>';
+            if(clockPickerState.mode === 'hour') renderHourFace(face); else renderMinuteFace(face);
+            attachClockPointerHandlers(face);
+        }
+        function polarPoint(angleDeg, radiusPct){
+            const a=(angleDeg-90)*Math.PI/180;
+            return {x:50+Math.cos(a)*radiusPct, y:50+Math.sin(a)*radiusPct};
+        }
+        function addClockNumber(face, label, angle, radius, selected=false, inner=false){
+            const p=polarPoint(angle,radius);
+            const el=document.createElement('div');
+            el.className='clock-number'+(inner?' inner':'')+(selected?' selected':'');
+            el.style.left=p.x+'%'; el.style.top=p.y+'%'; el.textContent=label;
+            face.appendChild(el);
+        }
+        function renderHourFace(face){
+            for(let i=1;i<=12;i++){
+                const angle=(i%12)*30;
+                const outerHour=i;
+                addClockNumber(face,String(outerHour),angle,40,clockPickerState.hour===outerHour,false);
+                const innerHour=i===12 ? 0 : i+12;
+                addClockNumber(face,pad2(innerHour),angle,25,clockPickerState.hour===innerHour,true);
+            }
+            const h=clockPickerState.hour;
+            const isInner=(h===0 || h>12);
+            const dialHour=h===0?12:(h>12?h-12:h);
+            drawClockHand(face,(dialHour%12)*30,isInner?25:40);
+        }
+        function renderMinuteFace(face){
+            for(let i=0;i<60;i++){
+                const tick=document.createElement('div');
+                tick.className='clock-minute-tick'+(i%5===0?' major':'');
+                tick.style.transform=`translate(-50%,-142px) rotate(${i*6}deg)`;
+                face.appendChild(tick);
+            }
+            for(let m=0;m<60;m+=5) addClockNumber(face,pad2(m),m*6,40,clockPickerState.minute===m,false);
+            drawClockHand(face,clockPickerState.minute*6,40);
+        }
+        function drawClockHand(face, angle, radiusPct){
+            const size=face.clientWidth || 300;
+            const radius=size*radiusPct/100;
+            const hand=document.createElement('div');
+            hand.className='clock-hand';
+            hand.style.height=radius+'px';
+            hand.style.top=`calc(50% - ${radius}px)`;
+            hand.style.transform=`translateX(-50%) rotate(${angle}deg)`;
+            face.appendChild(hand);
+            const p=polarPoint(angle,radiusPct);
+            const knob=document.createElement('div'); knob.className='clock-knob'; knob.style.left=p.x+'%'; knob.style.top=p.y+'%'; face.appendChild(knob);
+        }
+        function attachClockPointerHandlers(face){
+            face.onpointerdown=(e)=>{ clockPickerState.dragging=true; try{face.setPointerCapture(e.pointerId)}catch(_){}; updateClockFromPointer(e,face,false); };
+            face.onpointermove=(e)=>{ if(clockPickerState.dragging) updateClockFromPointer(e,face,false); };
+            face.onpointerup=(e)=>{ if(!clockPickerState.dragging) return; updateClockFromPointer(e,face,true); clockPickerState.dragging=false; };
+            face.onpointercancel=()=>clockPickerState.dragging=false;
+        }
+        function updateClockFromPointer(e,face,finish){
+            const r=face.getBoundingClientRect();
+            const cx=r.left+r.width/2, cy=r.top+r.height/2;
+            const dx=e.clientX-cx, dy=e.clientY-cy;
+            let deg=(Math.atan2(dy,dx)*180/Math.PI+450)%360;
+            const dist=Math.sqrt(dx*dx+dy*dy);
+            if(clockPickerState.mode==='hour'){
+                let dial=Math.round(deg/30)%12; if(dial===0) dial=12;
+                const inner=dist < r.width*0.33;
+                clockPickerState.hour=inner ? (dial===12?0:dial+12) : dial;
+                renderClockPicker();
+                if(finish){ setTimeout(()=>{ clockPickerState.mode='minute'; renderClockPicker(); },120); }
+            } else {
+                clockPickerState.minute=Math.round(deg/6)%60;
+                renderClockPicker();
+            }
+        }
+
+        function openLogModal(editId = null) {
+            document.getElementById('logModal').classList.remove('hidden');
+            renderCategoryDropdown();
+            if(editId) {
+                let log = db.logs.find(x => x.id === editId);
+                if(log) {
+                    document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Sửa Hoạt Động`;
+                    document.getElementById('editLogId').value = log.id;
+                    document.getElementById('logCategory').value = log.category;
+                    updateSubCategories();
+                    document.getElementById('logSubCategory').value = log.subCategory;
+                    setDateTimeValue('start', log.startTime);
+                    setDateTimeValue('end', log.endTime);
+                    document.getElementById('logDurationInput').value = log.autoEnd === true ? '' : formatDurationForInput(log.startTime, log.endTime);
+                    document.getElementById('logNote').value = log.note || '';
+                }
+            } else {
+                document.getElementById('modalTitle').innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Ghi Nhận Thời Gian`;
+                document.getElementById('logForm').reset();
+                document.getElementById('editLogId').value = '';
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                let isoTime = (new Date(now - offset)).toISOString().slice(0, 16);
+                setDateTimeValue('start', isoTime);
+                setDateTimeValue('end', isoTime);
+                renderCategoryDropdown();
+            }
+        }
+        function closeLogModal() { document.getElementById('logModal').classList.add('hidden'); }
+
+        function saveLog(e) {
+            e.preventDefault();
+            const editId = document.getElementById('editLogId').value;
+            const category = document.getElementById('logCategory').value;
+            const subCategory = document.getElementById('logSubCategory').value;
+            const startTime = document.getElementById('logStartTime').value;
+            const note = document.getElementById('logNote').value;
+            const durationStr = document.getElementById('logDurationInput').value.trim();
+            const autoEnd = durationStr === '';
+
+            let endTime = document.getElementById('logEndTime').value;
+            if(autoEnd) {
+                // Chưa có ghi chú tiếp theo: tạm kết thúc tại chính thời điểm bắt đầu.
+                // recalculateAutoEndLogs() sẽ cập nhật lại ngay khi có bản ghi kế tiếp.
+                endTime = startTime;
+            } else {
+                const mins = parseDurationToMinutes(durationStr);
+                if(mins <= 0) {
+                    alert('Thời lượng không hợp lệ. Ví dụ: 45p, 1h30p hoặc 2h.');
+                    return;
+                }
+                const start = new Date(startTime);
+                const end = new Date(start.getTime() + mins * 60000);
+                const offset = end.getTimezoneOffset() * 60000;
+                endTime = (new Date(end - offset)).toISOString().slice(0, 16);
+            }
+
+            if(new Date(startTime) > new Date(endTime)) {
+                alert("Thời gian bắt đầu không thể sau thời gian kết thúc!");
+                return;
+            }
+
+            if(editId) {
+                let log = db.logs.find(x => x.id == editId);
+                if(log) {
+                    log.category = category;
+                    log.subCategory = subCategory;
+                    log.startTime = startTime;
+                    log.endTime = endTime;
+                    log.note = note;
+                    log.autoEnd = autoEnd;
+                }
+            } else {
+                db.logs.push({
+                    id: Date.now(),
+                    category, subCategory, startTime, endTime, note, autoEnd
+                });
+            }
+
+            // Sau mỗi lần thêm/sửa, tính lại toàn bộ bản ghi tự động theo thứ tự thời gian.
+            // Nhờ vậy nếu bạn chèn một ghi chú vào giữa, bản ghi trước đó vẫn được chốt đúng.
+            recalculateAutoEndLogs();
+            db.logs.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
+            saveData();
+            closeLogModal();
+        }
+
+        function deleteLog(id, event) {
+            event.stopPropagation();
+            if(confirm("Bạn có chắc muốn xóa ghi nhận này?")) {
+                db.logs = db.logs.filter(l => l.id !== id);
+                recalculateAutoEndLogs();
+                saveData();
+            }
+        }
+
+        function getFilteredLogs() {
+            const filterDate = document.getElementById('filterDate').value;
+            return db.logs.filter(l => l.startTime.slice(0, 10) === filterDate);
+        }
+
+        function formatMinutes(mins) {
+            let h = Math.floor(mins / 60);
+            let m = mins % 60;
+            return h > 0 ? `${h} giờ ${m} phút` : `${m} phút`;
+        }
+
+        function renderLogs() {
+            const listEl = document.getElementById('logList');
+            let filtered = getFilteredLogs();
+
+            renderDailyPieChart(filtered);
+
+            if(filtered.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-8 text-gray-400 text-xs">Chưa có hoạt động nào được ghi nhận trong ngày này.</div>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(l => {
+                let startStr = new Date(l.startTime).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+                let endStr = new Date(l.endTime).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+                let durationMins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+
+                html += `
+                    <div onclick="openLogModal(${l.id})" class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center text-xs active:bg-gray-50 cursor-pointer">
+                        <div class="space-y-0.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">${l.category}</span>
+                                <span class="text-gray-600 font-semibold">• ${l.subCategory}</span>
+                            </div>
+                            <p class="text-gray-500">${l.note || 'Không có ghi chú'}</p>
+                            <span class="text-[10px] text-gray-400"><i class="fa-regular fa-clock mr-1"></i>${startStr} - ${endStr}</span>
+                        </div>
+                        <div class="text-right flex items-center gap-3">
+                            <div>
+                                <span class="font-extrabold text-sm text-indigo-600">${formatMinutes(durationMins)}</span>
+                            </div>
+                            <button onclick="deleteLog(${l.id}, event)" class="text-gray-300 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function updateSummaryCards() {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            let todayLogs = db.logs.filter(l => l.startTime.slice(0, 10) === todayStr);
+            let totalMins = 0;
+            let workMins = 0;
+            let growthMins = 0;
+
+            todayLogs.forEach(l => {
+                let mins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+                if(mins > 0) {
+                    totalMins += mins;
+                    if(l.category === 'Làm việc') workMins += mins;
+                    if(l.category === 'Đọc sách' || l.category === 'Tập thể dục') growthMins += mins;
+                }
+            });
+
+            document.getElementById('totalTimeToday').innerText = formatMinutes(totalMins);
+            document.getElementById('summaryWork').innerText = formatMinutes(workMins);
+            document.getElementById('summaryGrowth').innerText = formatMinutes(growthMins);
+        }
+
+        const chartValueLabelPlugin = {
+            id: 'chartValueLabelPlugin',
+            afterDatasetsDraw(chart, args, pluginOptions) {
+                if(!pluginOptions || pluginOptions.enabled === false) return;
+                const ds = chart.data.datasets[0];
+                if(!ds || !ds.rawMinutes) return;
+                const ctx = chart.ctx;
+                const meta = chart.getDatasetMeta(0);
+                ctx.save();
+                ctx.font = 'bold 10px system-ui, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                meta.data.forEach((el, i) => {
+                    const mins = ds.rawMinutes[i] || 0;
+                    if(mins <= 0) return;
+                    const txt = formatCompactDuration(mins);
+                    if(chart.config.type === 'doughnut' || chart.config.type === 'pie') {
+                        const props = el.getProps(['x','y','startAngle','endAngle','innerRadius','outerRadius'], true);
+                        const arc = props.endAngle - props.startAngle;
+                        if(arc < 0.30) return;
+                        const a = (props.startAngle + props.endAngle) / 2;
+                        const r = props.innerRadius + (props.outerRadius - props.innerRadius) * 0.58;
+                        const x = props.x + Math.cos(a) * r;
+                        const y = props.y + Math.sin(a) * r;
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                        ctx.strokeText(txt, x, y);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillText(txt, x, y);
+                    } else if(chart.config.type === 'bar') {
+                        const p = el.tooltipPosition();
+                        ctx.fillStyle = '#4338ca';
+                        if(chart.options.indexAxis === 'y') {
+                            ctx.textAlign = 'left';
+                            ctx.fillText(txt, Math.min(p.x + 6, chart.chartArea.right - 18), p.y);
+                        } else {
+                            ctx.textAlign = 'center';
+                            ctx.fillText(txt, p.x, Math.max(p.y - 9, chart.chartArea.top + 8));
+                        }
+                    }
+                });
+                ctx.restore();
+            }
+        };
+
+        function formatCompactDuration(mins) {
+            mins = Math.max(0, Math.round(Number(mins) || 0));
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            if(h && m) return `${h}g ${m}p`;
+            if(h) return `${h}g`;
+            return `${m}p`;
+        }
+
+        function sortCategoryEntries(entries, mode) {
+            const arr = [...entries];
+            if(mode === 'time_asc') arr.sort((a,b) => a.minutes - b.minutes || a.name.localeCompare(b.name, 'vi'));
+            else if(mode === 'name_asc') arr.sort((a,b) => a.name.localeCompare(b.name, 'vi'));
+            else if(mode === 'name_desc') arr.sort((a,b) => b.name.localeCompare(a.name, 'vi'));
+            else arr.sort((a,b) => b.minutes - a.minutes || a.name.localeCompare(b.name, 'vi'));
+            return arr;
+        }
+
+        function makeCategoryEntries(logs) {
+            const totals = {};
+            logs.forEach(l => {
+                const mins = Math.round((new Date(l.endTime) - new Date(l.startTime)) / 60000);
+                if(mins > 0) totals[l.category] = (totals[l.category] || 0) + mins;
+            });
+            return Object.entries(totals).map(([name, minutes]) => ({name, minutes}));
+        }
+
+        function renderChartSummary(targetId, entries) {
+            const el = document.getElementById(targetId);
+            if(!el) return;
+            if(entries.length === 0) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-1">Chưa có dữ liệu.</div>';
+                return;
+            }
+            const total = entries.reduce((s,x) => s + x.minutes, 0);
+            el.innerHTML = entries.map((x, i) => {
+                const pct = total > 0 ? Math.round(x.minutes * 100 / total) : 0;
+                return `<div class="flex items-center justify-between gap-2 rounded-lg bg-gray-50 border px-2.5 py-1.5">
+                    <div class="min-w-0"><span class="font-semibold text-gray-700">${i+1}. ${x.name}</span><span class="text-gray-400 ml-1">(${pct}%)</span></div>
+                    <span class="font-bold text-indigo-700 whitespace-nowrap">${formatMinutes(x.minutes)}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function buildTimeChart(canvasId, oldInstance, entries, chartType) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            if(oldInstance) oldInstance.destroy();
+            const isHorizontal = chartType === 'horizontalBar';
+            const actualType = isHorizontal ? 'bar' : chartType;
+            const hasData = entries.length > 0;
+            const safeEntries = hasData ? entries : [{name:'Chưa có dữ liệu', minutes:0}];
+            const labels = safeEntries.map(x => x.name);
+            const rawMinutes = safeEntries.map(x => x.minutes);
+            const hours = rawMinutes.map(m => Number((m / 60).toFixed(2)));
+            const colors = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#64748b', '#06b6d4', '#84cc16'];
+
+            return new Chart(ctx, {
+                type: actualType,
+                plugins: [chartValueLabelPlugin],
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Thời gian (giờ)',
+                        data: hours,
+                        rawMinutes,
+                        backgroundColor: colors.slice(0, labels.length),
+                        borderWidth: actualType === 'bar' ? 0 : 1,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: isHorizontal ? 'y' : 'x',
+                    layout: { padding: actualType === 'bar' ? {top: 18, right: isHorizontal ? 42 : 8} : 4 },
+                    scales: actualType === 'bar' ? {
+                        y: isHorizontal ? { ticks: { font: {size: 10}, autoSkip: false } } : { beginAtZero: true, title: {display:true, text:'Giờ'}, ticks: {font:{size:10}} },
+                        x: isHorizontal ? { beginAtZero: true, title: {display:true, text:'Giờ'}, ticks: {font:{size:10}} } : { ticks: { font: {size: 10}, autoSkip: false, maxRotation: 35, minRotation: 0 } }
+                    } : {},
+                    plugins: {
+                        chartValueLabelPlugin: { enabled: hasData },
+                        legend: {
+                            display: actualType !== 'bar',
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                font: { size: 10 },
+                                generateLabels(chart) {
+                                    const ds = chart.data.datasets[0];
+                                    return chart.data.labels.map((label, i) => ({
+                                        text: `${label} — ${formatCompactDuration(ds.rawMinutes[i] || 0)}`,
+                                        fillStyle: Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor,
+                                        strokeStyle: '#fff',
+                                        lineWidth: 0,
+                                        index: i,
+                                        hidden: false
+                                    }));
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label(context) {
+                                    const mins = context.dataset.rawMinutes[context.dataIndex] || 0;
+                                    return `${context.label}: ${formatMinutes(mins)} (${(mins/60).toFixed(2)} giờ)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDailyPieChart(filteredLogs) {
+            const type = document.getElementById('dailyChartType')?.value || 'doughnut';
+            const sortMode = document.getElementById('dailySort')?.value || 'time_desc';
+            const entries = sortCategoryEntries(makeCategoryEntries(filteredLogs), sortMode);
+            dailyPieChartInstance = buildTimeChart('dailyPieChart', dailyPieChartInstance, entries, type);
+            renderChartSummary('dailyChartSummary', entries);
+        }
+
+        function getISOWeekValue(date) {
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2,'0')}`;
+        }
+
+        function getWeekBounds(weekValue) {
+            if(!/^\d{4}-W\d{2}$/.test(weekValue || '')) return null;
+            const [yPart, wPart] = weekValue.split('-W');
+            const year = Number(yPart), week = Number(wPart);
+            const jan4 = new Date(year, 0, 4);
+            const jan4Day = jan4.getDay() || 7;
+            const monday = new Date(year, 0, 4 - jan4Day + 1 + (week - 1) * 7);
+            monday.setHours(0,0,0,0);
+            const end = new Date(monday); end.setDate(end.getDate() + 7);
+            return {start:monday, end};
+        }
+
+        function renderWeeklyLookup() {
+            const input = document.getElementById('weeklyLookupInput');
+            if(!input) return;
+            if(!input.value) input.value = getISOWeekValue(new Date());
+            const bounds = getWeekBounds(input.value);
+            if(!bounds) return;
+            const fmtDate = d => d.toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'});
+            const endDisplay = new Date(bounds.end); endDisplay.setDate(endDisplay.getDate() - 1);
+            document.getElementById('weeklyRangeText').innerHTML = `<i class="fa-regular fa-calendar mr-1"></i>${fmtDate(bounds.start)} → ${fmtDate(endDisplay)}`;
+            const logs = db.logs.filter(l => {
+                const d = new Date(l.startTime);
+                return d >= bounds.start && d < bounds.end;
+            }).sort((a,b) => new Date(a.startTime) - new Date(b.startTime));
+
+            const sortMode = document.getElementById('analyticsSort')?.value || 'time_desc';
+            const cats = sortCategoryEntries(makeCategoryEntries(logs), sortMode);
+            const catEl = document.getElementById('weeklyCategorySummary');
+            if(cats.length === 0) catEl.innerHTML = '<div class="text-center text-gray-400 text-[11px] py-2">Tuần này chưa có dữ liệu.</div>';
+            else catEl.innerHTML = cats.map((x,i) => `<div class="flex items-center justify-between bg-gray-50 rounded-lg border px-2.5 py-2 text-[11px]"><span class="font-semibold text-gray-700">${i+1}. ${x.name}</span><span class="font-extrabold text-indigo-700">${formatMinutes(x.minutes)}</span></div>`).join('');
+
+            const weekdays = ['Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy','Chủ Nhật'];
+            const dayEl = document.getElementById('weeklyDayChecklist');
+            let html = '';
+            for(let i=0;i<7;i++) {
+                const day = new Date(bounds.start); day.setDate(day.getDate()+i);
+                const dayKey = day.getFullYear() + '-' + String(day.getMonth()+1).padStart(2,'0') + '-' + String(day.getDate()).padStart(2,'0');
+                const dayLogs = logs.filter(l => l.startTime.slice(0,10) === dayKey);
+                const dayTotal = dayLogs.reduce((sum,l) => sum + Math.max(0, Math.round((new Date(l.endTime)-new Date(l.startTime))/60000)), 0);
+                html += `<div class="rounded-xl border overflow-hidden">
+                    <div class="flex items-center justify-between bg-gray-50 px-2.5 py-2 text-[11px]">
+                        <span class="font-bold text-gray-700">${weekdays[i]} · ${day.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})}</span>
+                        <span class="font-extrabold ${dayTotal ? 'text-indigo-700':'text-gray-400'}">${formatMinutes(dayTotal)}</span>
+                    </div>`;
+                if(dayLogs.length === 0) {
+                    html += `<div class="px-3 py-2 text-[10px] text-gray-400 italic">□ Chưa có hoạt động</div>`;
+                } else {
+                    dayLogs.forEach(l => {
+                        const mins = Math.max(0, Math.round((new Date(l.endTime)-new Date(l.startTime))/60000));
+                        const st = new Date(l.startTime).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+                        const en = new Date(l.endTime).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+                        html += `<div class="flex gap-2 px-3 py-2 border-t text-[10px]">
+                            <span class="text-indigo-500 text-sm leading-none mt-0.5">☑</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-gray-700">${l.category} · ${l.subCategory}</div>
+                                <div class="text-gray-400 truncate">${l.note || 'Không có ghi chú'}</div>
+                                <div class="text-gray-400 mt-0.5">${st}–${en}</div>
+                            </div>
+                            <span class="font-bold text-indigo-700 whitespace-nowrap">${formatCompactDuration(mins)}</span>
+                        </div>`;
+                    });
+                }
+                html += `</div>`;
+            }
+            dayEl.innerHTML = html;
+        }
+
+        function handleAnalyticsFilterChange() {
+            const filterVal = document.getElementById('analyticsTimeFilter').value;
+            document.getElementById('analyticsDateContainer').classList.add('hidden');
+            document.getElementById('analyticsMonthContainer').classList.add('hidden');
+            document.getElementById('analyticsYearContainer').classList.add('hidden');
+
+            if(filterVal === 'SPECIFIC_DATE') document.getElementById('analyticsDateContainer').classList.remove('hidden');
+            if(filterVal === 'SPECIFIC_MONTH') document.getElementById('analyticsMonthContainer').classList.remove('hidden');
+            if(filterVal === 'CUSTOM_YEAR') document.getElementById('analyticsYearContainer').classList.remove('hidden');
+
+            renderAnalyticsCharts();
+        }
+
+        function renderAnalyticsCharts() {
+            const filterVal = document.getElementById('analyticsTimeFilter').value;
+            const specificDate = document.getElementById('analyticsDateInput').value;
+            const specificMonth = document.getElementById('analyticsMonthInput').value;
+            const customYear = Number(document.getElementById('analyticsYearInput').value) || 2026;
+
+            const now = new Date();
+            let filtered = db.logs.filter(l => {
+                const lDate = new Date(l.startTime);
+                if(filterVal === 'TODAY') {
+                    return l.startTime.slice(0, 10) === now.toISOString().slice(0, 10);
+                } else if(filterVal === 'WEEK') {
+                    const bounds = getWeekBounds(getISOWeekValue(now));
+                    return lDate >= bounds.start && lDate < bounds.end;
+                } else if(filterVal === 'MONTH') {
+                    return lDate.getMonth() === now.getMonth() && lDate.getFullYear() === now.getFullYear();
+                } else if(filterVal === 'YEAR') {
+                    return lDate.getFullYear() === now.getFullYear();
+                } else if(filterVal === 'SPECIFIC_DATE') {
+                    return l.startTime.slice(0, 10) === specificDate;
+                } else if(filterVal === 'SPECIFIC_MONTH') {
+                    return l.startTime.slice(0, 7) === specificMonth;
+                } else if(filterVal === 'CUSTOM_YEAR') {
+                    return lDate.getFullYear() === customYear;
+                }
+                return true;
+            });
+
+            const sortMode = document.getElementById('analyticsSort')?.value || 'time_desc';
+            const chartType = document.getElementById('analyticsChartType')?.value || 'doughnut';
+            const entries = sortCategoryEntries(makeCategoryEntries(filtered), sortMode);
+            const totalMins = entries.reduce((sum,x) => sum + x.minutes, 0);
+            document.getElementById('analyticsTotalText').textContent = `Tổng: ${formatMinutes(totalMins)} · ${(totalMins/60).toFixed(2)} giờ`;
+            totalAnalyticsChartInstance = buildTimeChart('totalAnalyticsChart', totalAnalyticsChartInstance, entries, chartType);
+            renderChartSummary('analyticsChartSummary', entries);
+            renderWeeklyLookup();
+        }
+
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "timetrack_backup.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    db = JSON.parse(e.target.result);
+                    saveData();
+                    alert("Khôi phục dữ liệu thời gian thành công!");
+                } catch(err) {
+                    alert("File dữ liệu không hợp lệ!");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        window.onload = initApp;
+    </script>
+
+    <script>
+        let deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.remove('hidden');
+        });
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('#installAppBtn');
+            if (!btn || !deferredInstallPrompt) return;
+            deferredInstallPrompt.prompt();
+            try { await deferredInstallPrompt.userChoice; } catch (_) {}
+            deferredInstallPrompt = null;
+            btn.classList.add('hidden');
+        });
+        window.addEventListener('appinstalled', () => {
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.add('hidden');
+        });
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));
+        }
+    </script>
+
+    <script>
+    // ===== TimeTrack Google Drive sync via Vercel serverless OAuth =====
+    let serverDriveConnected = false;
+    let activeDriveEmail = '';
+    let driveSyncTimer = null;
+
+    const ORIGINAL_SAVE_DATA = saveData;
+    function driveDataKey(email=activeDriveEmail) { return email ? 'timetrack_db_v2_drive_' + email.toLowerCase() : 'timetrack_db_v2'; }
+    function driveUpdatedKey(email=activeDriveEmail) { return 'timetrack_drive_updated_' + (email || 'local').toLowerCase(); }
+
+    function setDriveState(text, ok=true) {
+        const t = document.getElementById('driveSyncText');
+        const b = document.getElementById('driveAccountBadge');
+        if(t) t.innerText = text;
+        if(b) { b.innerText = text; b.className = ok ? 'bg-emerald-600 px-2 py-0.5 rounded text-[10px] font-bold' : 'bg-amber-500 px-2 py-0.5 rounded text-[10px] font-bold'; }
+    }
+
+    function refreshDriveUI() {
+        const logged = serverDriveConnected && !!activeDriveEmail;
+        const email = activeDriveEmail || 'Chưa kết nối Google Drive';
+        document.getElementById('driveAccountEmail').innerText = email;
+        document.getElementById('drivePanelEmail').innerText = email;
+        document.getElementById('driveLoginBtn').classList.toggle('hidden', logged);
+        document.getElementById('driveSyncBtn').classList.toggle('hidden', !logged);
+        document.getElementById('driveSwitchBtn').classList.toggle('hidden', !logged);
+        document.getElementById('driveLogoutBtn').classList.toggle('hidden', !logged);
+        if(!logged) setDriveState('Cục bộ', false);
+    }
+
+    function openDrivePanel() {
+        if(!serverDriveConnected) { connectGoogleDrive(false); return; }
+        document.getElementById('drivePanel').classList.remove('hidden');
+        refreshDriveUI();
+    }
+    function closeDrivePanel() { document.getElementById('drivePanel').classList.add('hidden'); }
+
+    function saveData() {
+        const now = new Date().toISOString();
+        localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+        if(activeDriveEmail) {
+            localStorage.setItem(driveDataKey(), JSON.stringify(db));
+            localStorage.setItem(driveUpdatedKey(), now);
+        }
+        updateAllUI();
+        if(serverDriveConnected) {
+            clearTimeout(driveSyncTimer);
+            setDriveState('Chờ đồng bộ…', false);
+            driveSyncTimer = setTimeout(() => pushCloudData(false), 900);
+        }
+    }
+
+    async function apiJson(url, options={}) {
+        const r = await fetch(url, { credentials:'include', ...options });
+        if(r.status === 204) return null;
+        const text = await r.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+        if(!r.ok) throw new Error(data?.error || ('HTTP ' + r.status));
+        return data;
+    }
+
+    async function initDriveSession() {
+        try {
+            const s = await apiJson('/api/google-session');
+            serverDriveConnected = !!s?.connected;
+            activeDriveEmail = s?.email || '';
+            if(serverDriveConnected && activeDriveEmail) {
+                const saved = localStorage.getItem(driveDataKey());
+                if(saved) {
+                    try { db = JSON.parse(saved); } catch(_) {}
+                } else if(!localStorage.getItem('timetrack_drive_first_migration_done')) {
+                    // First connected Gmail receives the current local data as its starting copy.
+                    localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                    localStorage.setItem(driveUpdatedKey(), new Date().toISOString());
+                    localStorage.setItem('timetrack_drive_first_migration_done', '1');
+                } else {
+                    // A different Gmail starts clean unless Drive already contains data.
+                    db = { categories: JSON.parse(JSON.stringify(DEFAULT_TIMETRACK_CATEGORIES)), logs: [] };
+                    localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                    localStorage.setItem(driveUpdatedKey(), '1970-01-01T00:00:00.000Z');
+                }
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                updateAllUI();
+                await syncNow(false);
+            }
+            refreshDriveUI();
+            return serverDriveConnected;
+        } catch(e) {
+            serverDriveConnected = false; activeDriveEmail = '';
+            refreshDriveUI();
+            console.error(e);
+            return false;
+        }
+    }
+
+    async function getRemoteDrivePayload() { return await apiJson('/api/drive-data'); }
+    async function uploadRemoteDrivePayload(payload) {
+        return await apiJson('/api/drive-data', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    }
+
+    async function pushCloudData(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        if(!navigator.onLine) { setDriveState('Ngoại tuyến', false); return; }
+        try {
+            setDriveState('Đang đẩy…', false);
+            const updatedAt = localStorage.getItem(driveUpdatedKey()) || new Date().toISOString();
+            await uploadRemoteDrivePayload({ app:'timetrack', version:1, email:activeDriveEmail, updatedAt, data:db });
+            localStorage.setItem('timetrack_last_sync', new Date().toISOString());
+            setDriveState('Đã đồng bộ');
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không đồng bộ được Google Drive: ' + e.message);
+        }
+    }
+
+    async function pullCloudData(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        try {
+            setDriveState('Đang tải…', false);
+            const p = await getRemoteDrivePayload();
+            if(p?.data) {
+                db = p.data;
+                localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                localStorage.setItem(driveUpdatedKey(), p.updatedAt || new Date().toISOString());
+                updateAllUI();
+                setDriveState('Đã đồng bộ');
+            } else {
+                setDriveState('Drive chưa có dữ liệu', false);
+                if(interactive) await pushCloudData(true);
+            }
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không tải được Google Drive: ' + e.message);
+        }
+    }
+
+    async function syncNow(interactive=true) {
+        if(!serverDriveConnected) { if(interactive) connectGoogleDrive(false); return; }
+        try {
+            setDriveState('Đang đồng bộ…', false);
+            const remote = await getRemoteDrivePayload();
+            const localTs = Date.parse(localStorage.getItem(driveUpdatedKey()) || '1970-01-01') || 0;
+            const remoteTs = Date.parse(remote?.updatedAt || '1970-01-01') || 0;
+            if(remote?.data && remoteTs > localTs) {
+                db = remote.data;
+                localStorage.setItem(driveDataKey(), JSON.stringify(db));
+                localStorage.setItem('timetrack_db_v2', JSON.stringify(db));
+                localStorage.setItem(driveUpdatedKey(), remote.updatedAt);
+                updateAllUI();
+            } else {
+                await pushCloudData(false);
+            }
+            setDriveState('Đã đồng bộ');
+            closeDrivePanel();
+        } catch(e) {
+            setDriveState('Lỗi Drive', false);
+            if(interactive) alert('Không đồng bộ được Google Drive: ' + e.message);
+        }
+    }
+
+    function connectGoogleDrive(forceChooser=false) {
+        window.location.assign(forceChooser ? '/api/google-login?switch=1' : '/api/google-login');
+    }
+    async function switchGoogleAccount() {
+        if(activeDriveEmail) {
+            localStorage.setItem(driveDataKey(), JSON.stringify(db));
+            localStorage.setItem(driveUpdatedKey(), localStorage.getItem(driveUpdatedKey()) || new Date().toISOString());
+        }
+        window.location.assign('/api/google-login?switch=1');
+    }
+    async function signOutGoogleDrive() {
+        if(activeDriveEmail) localStorage.setItem(driveDataKey(), JSON.stringify(db));
+        try { await fetch('/api/google-logout', { method:'POST', credentials:'include' }); } catch(_) {}
+        serverDriveConnected = false; activeDriveEmail = '';
+        refreshDriveUI(); closeDrivePanel();
+    }
+
+    const DEFAULT_TIMETRACK_CATEGORIES = {
+        "Làm việc": ["Đi kiểm tra hiện trường", "Nhắc nhở thi công", "Xem tin nhắn nhóm", "Lập tiến độ & Hồ sơ", "Họp & Trao đổi"],
+        "Ăn uống": ["Ăn sáng", "Ăn trưa", "Ăn tối", "Cà phê / Giải khát"],
+        "Tập thể dục": ["Đi bộ", "Hít xà / Thể hình", "Bát Đoạn Cẩm & Thái Cực Quyền"],
+        "Đọc sách": ["Sách Quản lý & Lãnh đạo", "Sách Kỹ năng giao tiếp", "Đọc tài liệu tiếng Anh"],
+        "Giải trí": ["Xem tin tức", "Chơi game (Đế Chế)", "Thư giãn"],
+        "Di chuyển": ["Đi lại công trường", "Về quê / Di chuyển cá nhân"],
+        "Ngủ": ["Ngủ đêm", "Ngủ trưa"]
+    };
+
+    window.addEventListener('load', async () => {
+        const q = new URLSearchParams(location.search);
+        if(q.get('drive_auth_error')) alert('Đăng nhập Google lỗi: ' + q.get('drive_auth_error'));
+        await initDriveSession();
+        if(q.has('drive_auth') || q.has('drive_auth_error')) history.replaceState({}, '', location.pathname);
+    });
+    window.addEventListener('online', () => { if(serverDriveConnected) syncNow(false); });
+    window.addEventListener('offline', () => setDriveState('Ngoại tuyến', false));
+    </script>
+
+</body>
+</html>
